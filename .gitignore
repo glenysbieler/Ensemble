@@ -1,0 +1,22 @@
+# ==========================================
+# OpenSim PHP Project Git Ignore Rules
+# ==========================================
+
+# 1. Ignore the live SQLite database file
+/data/*.db
+
+# 2. Ignore temporary SQLite write-ahead logs and journal files
+/data/*.db-journal
+/data/*.db-wal
+/data/*.db-shm
+
+# 3. Ignore all user-uploaded content
+/uploads/*
+
+# 4. EXCEPTION: Force Git to track your README files so folders stay alive on GitHub
+!/data/.README.md
+!/uploads/.README.md
+
+# 5. Ignore local OS junk files
+.DS_Store
+Thumbs.db
