@@ -1,0 +1,2763 @@
+/* ============================================================
+   Ensemble — Default Theme
+   Soft rose & periwinkle palette, inspired by the logo.
+   Playfair Display headings / DM Sans body.
+   ============================================================ */
+
+/* ── Tokens ───────────────────────────────────────────────── */
+:root {
+    /* Core palette — rose to periwinkle */
+    --rose-100:  #fdf2f5;
+    --rose-200:  #f9dde6;
+    --rose-300:  #f2b8ca;
+    --rose-400:  #e889a8;
+    --rose-500:  #d4607f;
+    --rose-600:  #b84068;
+
+    --peri-100:  #f0f1fb;
+    --peri-200:  #d8dcf5;
+    --peri-300:  #b0b9ee;
+    --peri-400:  #8491dc;
+    --peri-500:  #5f6ec7;
+
+    --neutral-50:  #fafafa;
+    --neutral-100: #f4f4f5;
+    --neutral-200: #e4e4e7;
+    --neutral-400: #a1a1aa;
+    --neutral-600: #52525b;
+    --neutral-800: #27272a;
+    --neutral-900: #18181b;
+
+    /* Semantic */
+    --color-bg:          #fef9fa;
+    --color-surface:     #ffffff;
+    --color-border:      var(--rose-200);
+    --color-text:        var(--neutral-800);
+    --color-text-muted:  var(--neutral-400);
+    --color-primary:     var(--rose-500);
+    --color-primary-hov: var(--rose-600);
+    --color-accent:      var(--peri-400);
+
+    /* Status */
+    --color-online:  #22c55e;
+    --color-stale:   #f59e0b;
+    --color-offline: var(--neutral-400);
+
+    /* Layout */
+    --radius-sm:  6px;
+    --radius-md:  12px;
+    --radius-lg:  20px;
+    --shadow-sm:  0 1px 3px rgba(180,100,130,.08), 0 1px 2px rgba(180,100,130,.06);
+    --shadow-md:  0 4px 16px rgba(180,100,130,.10), 0 2px 6px rgba(180,100,130,.07);
+    --shadow-lg:  0 12px 40px rgba(180,100,130,.13), 0 4px 12px rgba(180,100,130,.08);
+
+    --max-width: 1400px;  /* wider cap lets the outfit grid breathe on large monitors */
+    --header-h:  64px;
+}
+
+/* ── Reset ────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+
+body {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 400;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    line-height: 1.6;
+    min-height: 100vh;
+
+    /* Subtle watermark texture */
+    background-image:
+        radial-gradient(ellipse 60% 40% at 80% 0%, rgba(180,100,130,.07) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 30% at 10% 90%, rgba(132,145,220,.06) 0%, transparent 70%);
+}
+
+/* ── Layout shell ─────────────────────────────────────────── */
+.page-wrap {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.main-content {
+    flex: 1;
+    padding: 2.5rem 1.25rem 3rem;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+.site-header {
+    height: var(--header-h);
+    background: rgba(255,255,255,.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--color-border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-inner {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    padding: 0 1.25rem;
+    height: 100%;
+    display: grid;
+    /* Three equal columns: [hamburger] [logo] [nav/right-side] */
+    /* The logo column is centred; left and right columns are same width
+       so the logo stays visually centred regardless of their content. */
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+}
+
+/* Push the header-nav (right column) to the far right */
+.header-nav {
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.logo-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.logo-img {
+    /* Fit within the header height with a little breathing room */
+    height: calc(var(--header-h) - 16px);
+    width: auto;
+    display: block;
+    /* The logo PNG has a white background — multiply blends it away
+       against the header's near-white surface cleanly. */
+    mix-blend-mode: multiply;
+}
+
+/* Keep the old text-logo classes harmless in case anything still refs them */
+.logo-text { display: none; }
+.logo-tag  { display: none; }
+
+.nav-username {
+    font-size: .875rem;
+    font-weight: 500;
+    color: var(--neutral-600);
+}
+
+/* ── Hamburger button ─────────────────────────────────────── */
+.hamburger-btn {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 36px;
+    height: 36px;
+    padding: 6px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background .15s, border-color .15s;
+}
+.hamburger-btn:hover {
+    background: var(--rose-100);
+    border-color: var(--rose-300);
+}
+.hamburger-bar {
+    display: block;
+    width: 100%;
+    height: 2px;
+    background: var(--neutral-600);
+    border-radius: 2px;
+    transition: background .15s;
+}
+.hamburger-btn:hover .hamburger-bar {
+    background: var(--color-primary);
+}
+
+/* ── Side menu overlay ────────────────────────────────────── */
+.side-menu-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.35);
+    z-index: 200;
+    backdrop-filter: blur(2px);
+}
+.side-menu-overlay--visible {
+    display: block;
+}
+
+/* ── Side menu panel ──────────────────────────────────────── */
+.side-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 280px;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    box-shadow: var(--shadow-lg);
+    z-index: 201;
+    transform: translateX(-100%);
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.side-menu--open {
+    transform: translateX(0);
+}
+
+.side-menu-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--color-border);
+    flex-shrink: 0;
+}
+.side-menu-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--neutral-800);
+}
+.side-menu-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--neutral-600);
+    transition: background .15s, color .15s;
+}
+.side-menu-close:hover {
+    background: var(--rose-100);
+    color: var(--color-primary);
+}
+
+/* ── Menu list ────────────────────────────────────────────── */
+.side-menu-list {
+    list-style: none;
+    padding: .5rem 0;
+    flex: 1;
+}
+.side-menu-item {
+    /* nothing — children handle layout */
+}
+
+/* Top-level trigger button */
+.side-menu-trigger {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    width: 100%;
+    padding: .65rem 1.25rem;
+    background: transparent;
+    border: none;
+    text-align: left;
+    font-family: 'DM Sans', sans-serif;
+    font-size: .9rem;
+    font-weight: 500;
+    color: var(--neutral-800);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.side-menu-trigger:hover {
+    background: var(--rose-100);
+    color: var(--color-primary);
+}
+.side-menu-icon {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    color: var(--neutral-400);
+    transition: color .12s;
+}
+.side-menu-trigger:hover .side-menu-icon {
+    color: var(--color-primary);
+}
+.side-menu-chevron {
+    width: 16px;
+    height: 16px;
+    margin-left: auto;
+    flex-shrink: 0;
+    color: var(--neutral-400);
+    transition: transform .2s, color .12s;
+}
+.side-menu-chevron.rotated {
+    transform: rotate(90deg);
+}
+
+/* ── Submenus ─────────────────────────────────────────────── */
+.side-submenu {
+    display: none;
+    list-style: none;
+    background: var(--rose-100);
+    border-top: 1px solid var(--rose-200);
+    border-bottom: 1px solid var(--rose-200);
+}
+.side-submenu--open {
+    display: block;
+}
+
+.side-submenu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: .55rem 1.25rem .55rem 2.75rem;
+    background: transparent;
+    border: none;
+    text-align: left;
+    font-family: 'DM Sans', sans-serif;
+    font-size: .85rem;
+    font-weight: 400;
+    color: var(--neutral-600);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.side-submenu-item:hover {
+    background: var(--rose-200);
+    color: var(--color-primary);
+}
+
+/* Nested submenu (RLV > children) */
+.side-submenu--nested {
+    background: var(--peri-100);
+    border-color: var(--peri-200);
+}
+.side-submenu--nested .side-submenu-item {
+    padding-left: 3.75rem;
+    color: var(--neutral-600);
+}
+.side-submenu--nested .side-submenu-item:hover {
+    background: var(--peri-200);
+    color: var(--peri-500);
+}
+.side-menu-chevron--sm {
+    width: 14px;
+    height: 14px;
+}
+
+/* Divider between menu sections */
+.side-menu-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: .5rem 1.25rem;
+}
+
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background .15s, color .15s, box-shadow .15s, transform .1s;
+    line-height: 1;
+}
+
+.btn:active { transform: translateY(1px); }
+
+.btn-primary {
+    background: var(--color-primary);
+    color: #fff;
+    padding: .75rem 1.5rem;
+    font-size: 1rem;
+    box-shadow: 0 2px 8px rgba(212,96,127,.3);
+}
+
+.btn-primary:hover {
+    background: var(--color-primary-hov);
+    box-shadow: 0 4px 14px rgba(212,96,127,.35);
+}
+
+.btn-primary:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.btn-ghost {
+    background: transparent;
+    color: var(--neutral-600);
+    border: 1px solid var(--color-border);
+    padding: .4rem 1rem;
+    font-size: .875rem;
+}
+
+.btn-ghost:hover {
+    background: var(--rose-100);
+    color: var(--color-primary);
+    border-color: var(--rose-300);
+}
+
+.btn-ghost:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
+
+.btn-sm  { padding: .35rem .8rem; font-size: .8rem; }
+.btn-full { width: 100%; }
+
+/* ── Cards ────────────────────────────────────────────────── */
+.card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    transition: box-shadow .2s;
+}
+
+.card:hover { box-shadow: var(--shadow-md); }
+
+.card-body {
+    padding: 1.75rem 2rem;
+}
+
+.card-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--neutral-800);
+    margin-bottom: 1.25rem;
+    padding-bottom: .75rem;
+    border-bottom: 1px solid var(--rose-100);
+}
+
+/* ── Alerts ───────────────────────────────────────────────── */
+.alert {
+    padding: .875rem 1rem;
+    border-radius: var(--radius-md);
+    font-size: .9rem;
+    line-height: 1.5;
+    margin-bottom: 1.25rem;
+}
+
+.alert-error {
+    background: #fff1f3;
+    border: 1px solid #fecdd3;
+    color: #9f1239;
+}
+
+.alert-success {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #15803d;
+}
+
+/* ── Form fields ──────────────────────────────────────────── */
+.field { margin-bottom: 1.25rem; }
+
+.field-label {
+    display: block;
+    font-size: .875rem;
+    font-weight: 500;
+    color: var(--neutral-600);
+    margin-bottom: .4rem;
+}
+
+.field-input {
+    width: 100%;
+    padding: .7rem .9rem;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: .975rem;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.field-input:focus {
+    outline: none;
+    border-color: var(--rose-400);
+    box-shadow: 0 0 0 3px rgba(232,137,168,.18);
+}
+
+/* Password reveal wrapper */
+.pw-wrap {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+}
+.pw-wrap .field-input {
+    flex: 1;
+    padding-right: 2.8rem;   /* room for the eye button */
+}
+.pw-reveal {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 2.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--color-text-muted);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    transition: color .15s;
+    padding: 0;
+}
+.pw-reveal:hover { color: var(--color-primary); }
+.pw-reveal svg   { width: 1.1rem; height: 1.1rem; pointer-events: none; }
+
+.field-hint {
+    display: block;
+    margin-top: .35rem;
+    font-size: .78rem;
+    color: var(--color-text-muted);
+}
+
+.monospace {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: .875em;
+    letter-spacing: .02em;
+}
+
+/* ── Login page ───────────────────────────────────────────── */
+.login-wrap {
+    max-width: 440px;
+    margin: 2rem auto 0;
+}
+
+.login-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem 2.25rem;
+    box-shadow: var(--shadow-lg);
+
+    /* Subtle inner top gradient */
+    background-image: linear-gradient(180deg, var(--rose-100) 0%, transparent 60px);
+}
+
+.login-heading {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--neutral-900);
+    margin-bottom: .4rem;
+}
+
+.login-subtext {
+    color: var(--neutral-600);
+    font-size: .9rem;
+    margin-bottom: 1.75rem;
+    line-height: 1.55;
+}
+
+.login-form { margin-bottom: 1.5rem; }
+
+.field-remember {
+    margin-top: .75rem;
+    text-align: center;
+}
+
+.remember-label {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .85rem;
+    color: var(--neutral-600);
+    cursor: pointer;
+}
+
+.remember-label input[type="checkbox"] {
+    accent-color: var(--rose-500);
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+}
+
+.login-help {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--rose-100);
+    font-size: .82rem;
+    color: var(--color-text-muted);
+    line-height: 1.55;
+}
+
+/* ── Dashboard ────────────────────────────────────────────── */
+.dashboard-wrap {
+    max-width: var(--max-width);
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+/* ── Status badge — used in header nav ───────────────────── */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .3rem .85rem;
+    border-radius: 999px;
+    font-size: .82rem;
+    font-weight: 500;
+    letter-spacing: .02em;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-online  .status-dot { background: var(--color-online);  animation: pulse-green 2s infinite; }
+.status-stale   .status-dot { background: var(--color-stale);   animation: pulse-amber 2s infinite; }
+.status-offline .status-dot { background: var(--color-offline); }
+
+.status-online  { background: rgba(34,197,94,.1);   color: #15803d; }
+.status-stale   { background: rgba(245,158,11,.1);  color: #b45309; }
+.status-offline { background: var(--neutral-100);   color: var(--neutral-600); }
+
+@keyframes pulse-green {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,.4); }
+    50%       { box-shadow: 0 0 0 5px rgba(34,197,94,0); }
+}
+
+@keyframes pulse-amber {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.4); }
+    50%       { box-shadow: 0 0 0 5px rgba(245,158,11,0); }
+}
+
+/* ── Outfits placeholder ──────────────────────────────────── */
+.card-placeholder {
+    grid-column: 1 / -1;
+    border-style: dashed;
+    border-color: var(--peri-200);
+    background: var(--peri-100);
+    box-shadow: none;
+}
+
+.card-placeholder:hover { box-shadow: none; }
+
+.placeholder-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 2.5rem 2rem;
+    gap: .75rem;
+}
+
+.placeholder-icon {
+    width: 48px;
+    height: 48px;
+    color: var(--peri-400);
+    opacity: .7;
+}
+
+.placeholder-icon svg { width: 100%; height: 100%; }
+
+.placeholder-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--neutral-700, var(--neutral-800));
+}
+
+.placeholder-text {
+    font-size: .875rem;
+    color: var(--neutral-600);
+    max-width: 480px;
+    line-height: 1.6;
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+.site-footer {
+    text-align: center;
+    padding: 1.5rem 1.25rem;
+    font-size: .78rem;
+    color: var(--color-text-muted);
+    border-top: 1px solid var(--color-border);
+}
+
+/* ── Outfit grid ──────────────────────────────────────────── */
+.card-outfits {
+    grid-column: 1 / -1;
+}
+
+.outfits-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    padding-bottom: .75rem;
+    border-bottom: 1px solid var(--rose-100);
+}
+
+.outfits-header .card-title {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.outfit-count {
+    font-size: .8rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+}
+
+.outfits-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 2rem 1rem;
+    gap: .75rem;
+}
+
+.outfit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1.25rem;
+}
+
+.outfit-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    transition: box-shadow .2s, transform .15s;
+    display: flex;
+    flex-direction: column;
+}
+
+.outfit-card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.outfit-card--warning {
+    border-color: #fbbf24;
+}
+
+.outfit-image-wrap {
+    position: relative;
+    aspect-ratio: 1;
+    background: var(--rose-100);
+    overflow: hidden;
+}
+
+.outfit-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.outfit-warning-badge {
+    position: absolute;
+    top: .4rem;
+    right: .4rem;
+    background: #fbbf24;
+    color: #78350f;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: .75rem;
+    font-weight: 700;
+}
+
+.outfit-details {
+    padding: .75rem .875rem .5rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+}
+
+.outfit-name {
+    font-family: 'Playfair Display', serif;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--neutral-800);
+    line-height: 1.3;
+}
+
+.outfit-path {
+    font-size: .7rem;
+    color: var(--color-text-muted);
+    font-family: 'Courier New', monospace;
+    word-break: break-all;
+    line-height: 1.4;
+}
+
+/* Tag list shown on outfit card when tags exist (replaces path display) */
+.outfit-tags {
+    font-size: .72rem;
+    color: var(--neutral-600);
+    line-height: 1.5;
+    /* Clamp to 2 lines, truncate remainder with ellipsis */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.outfit-attachments {
+    font-size: .75rem;
+    color: var(--neutral-600);
+    margin-top: .2rem;
+}
+
+.outfit-date {
+    font-size: .72rem;
+    color: var(--color-text-muted);
+    margin-top: auto;
+    padding-top: .35rem;
+}
+
+.outfit-warning-text {
+    font-size: .72rem;
+    color: #b45309;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: var(--radius-sm);
+    padding: .3rem .5rem;
+    margin-top: .35rem;
+    line-height: 1.4;
+}
+
+.outfit-actions {
+    padding: .5rem .875rem .75rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.btn-wear {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    width: 100%;
+    justify-content: center;
+    background: var(--color-primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: .45rem .75rem;
+    font-family: 'DM Sans', sans-serif;
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, box-shadow .15s, transform .1s;
+    box-shadow: 0 1px 4px rgba(212,96,127,.25);
+}
+
+.btn-wear svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.btn-wear:hover:not(:disabled) {
+    background: var(--color-primary-hov);
+    box-shadow: 0 2px 8px rgba(212,96,127,.3);
+}
+
+.btn-wear:active:not(:disabled) { transform: translateY(1px); }
+
+.btn-wear:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
+.btn-wear--offline {
+    background: var(--neutral-200);
+    color: var(--neutral-400);
+    box-shadow: none;
+    cursor: not-allowed;
+}
+
+.btn-wear--offline:hover { background: var(--neutral-200); box-shadow: none; }
+
+/* ── Wear toast notification ──────────────────────────────── */
+.wear-toast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(1rem);
+    background: var(--neutral-800);
+    color: #fff;
+    padding: .65rem 1.25rem;
+    border-radius: 999px;
+    font-size: .875rem;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s, transform .2s;
+    z-index: 600;
+    white-space: nowrap;
+}
+
+.wear-toast--visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.wear-toast--success { background: #15803d; }
+.wear-toast--error   { background: #9f1239; }
+.wear-toast--info    { background: var(--peri-500); }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 600px) {
+    .card-body { padding: 1.25rem 1.25rem; }
+    .login-card { padding: 1.75rem 1.25rem; }
+    .outfit-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+/* ══════════════════════════════════════════════════════════════
+   Outfit card — delete button & image click
+   ══════════════════════════════════════════════════════════════ */
+
+/* Action row — Wear + Remove only; delete lives on the image */
+.outfit-actions {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    padding: .5rem .875rem .75rem;
+    border-top: 1px solid var(--color-border);
+}
+
+/* Wear button fills available space */
+.btn-wear {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Delete (bin) button — floats over top-right corner of the outfit image */
+.btn-delete {
+    position: absolute;
+    top: .4rem;
+    right: .4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: rgba(255,255,255,.82);
+    backdrop-filter: blur(4px);
+    color: var(--neutral-400);
+    border: 1px solid rgba(255,255,255,.55);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    /* Hidden by default — revealed on card hover so it doesn't clutter the grid */
+    opacity: 0;
+    transition: opacity .15s, background .15s, color .15s, border-color .15s, transform .1s;
+}
+
+.btn-delete svg {
+    width: 14px;
+    height: 14px;
+    pointer-events: none;
+}
+
+/* Reveal when the card is hovered */
+.outfit-card:hover .btn-delete { opacity: 1; }
+
+.btn-delete:hover {
+    background: #fff1f3;
+    color: #9f1239;
+    border-color: #fecdd3;
+}
+
+.btn-delete:active { transform: translateY(1px); }
+
+/* Remove button — sits between Wear and Delete */
+.btn-remove {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: .45rem .6rem;
+    background: transparent;
+    color: var(--neutral-600);
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+    white-space: nowrap;
+}
+
+.btn-remove:hover {
+    background: var(--rose-100);
+    color: var(--color-primary);
+    border-color: var(--rose-300);
+}
+
+.btn-remove:active { transform: translateY(1px); }
+
+.btn-remove:disabled {
+    opacity: .6;
+    cursor: not-allowed;
+}
+
+.btn-remove--offline {
+    color: var(--neutral-400);
+    border-color: var(--neutral-200);
+    cursor: not-allowed;
+}
+
+.btn-remove--offline:hover {
+    background: transparent;
+    color: var(--neutral-400);
+    border-color: var(--neutral-200);
+}
+
+/* Clickable outfit image */
+.outfit-image--clickable {
+    cursor: pointer;
+    transition: opacity .15s, transform .15s;
+}
+
+.outfit-image--clickable:hover {
+    opacity: .88;
+    transform: scale(1.02);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Modal foundation — shared by delete + properties modals
+   ══════════════════════════════════════════════════════════════ */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(24, 24, 27, .45);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 500;
+    padding: 1rem;
+    /* animate in */
+    animation: modal-fade-in .15s ease;
+}
+
+.modal-backdrop[hidden] { display: none; }
+
+@keyframes modal-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.modal-box {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+    width: 100%;
+    animation: modal-slide-in .15s ease;
+    outline: none;
+}
+
+@keyframes modal-slide-in {
+    from { transform: translateY(10px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.modal-box--sm { max-width: 420px; }
+.modal-box--md { max-width: 560px; }
+.modal-box--lg { max-width: 680px; }
+
+/* ── Account modal ────────────────────────────────────────── */
+.acct-section {
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.acct-section:last-child { border-bottom: none; }
+
+.acct-section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--neutral-800);
+    margin-bottom: .85rem;
+}
+
+.acct-dl { display: flex; flex-direction: column; gap: .55rem; }
+
+.acct-row {
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: .5rem;
+    align-items: baseline;
+}
+.acct-row dt {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--neutral-600);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.acct-row dd {
+    font-size: .875rem;
+    color: var(--neutral-800);
+    word-break: break-all;
+}
+.acct-mono {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: .8rem !important;
+    letter-spacing: .02em;
+}
+.acct-muted { color: var(--color-text-muted) !important; }
+.acct-truncate {
+    /* Intentionally not truncating — long values like simulator URLs
+       should wrap rather than be clipped. The title attribute still
+       shows the full value on hover if needed. */
+    word-break: break-all;
+}
+
+/* HUD lock status in Account modal */
+.acct-hud-locked   { color: var(--rose-600); font-weight: 500; }
+.acct-hud-unlocked { color: #15803d; font-weight: 500; }
+
+/* ── Worn items section ───────────────────────────────────── */
+.acct-section--worn { padding-top: 1.25rem; }
+
+.acct-worn-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .85rem;
+}
+.acct-worn-header .acct-section-title { margin-bottom: 0; }
+
+.acct-worn-notice {
+    font-size: .78rem;
+    color: var(--color-text-muted);
+    margin-bottom: .75rem;
+}
+    font-size: .85rem;
+    color: var(--color-text-muted);
+    padding: .75rem 0;
+}
+.acct-worn-offline {
+    font-size: .85rem;
+    color: #9f1239;
+    padding: .75rem 0;
+}
+
+/* Spinner for loading state */
+.acct-worn-hint--loading {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+.acct-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--rose-300);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: acct-spin .7s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes acct-spin { to { transform: rotate(360deg); } }
+
+/* Worn items table */
+.worn-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .85rem;
+}
+.worn-table thead th {
+    text-align: left;
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--neutral-600);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: .35rem .5rem;
+    border-bottom: 1px solid var(--color-border);
+}
+.worn-table tbody tr:hover { background: var(--rose-100); }
+.worn-table td {
+    padding: .4rem .5rem;
+    border-bottom: 1px solid var(--neutral-100);
+    vertical-align: middle;
+}
+.worn-item-name { color: var(--neutral-800); }
+.worn-point {
+    color: var(--color-text-muted);
+    font-size: .78rem;
+    white-space: nowrap;
+}
+.worn-action { text-align: right; white-space: nowrap; }
+
+.worn-group-header td {
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--color-text-muted);
+    background: var(--neutral-100);
+    padding: .3rem .5rem;
+    border-bottom: none;
+}
+
+.btn-worn-remove {
+    font-size: .78rem;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    color: #9f1239;
+    background: transparent;
+    border: 1px solid #fca5a5;
+    border-radius: var(--radius-sm);
+    padding: .2rem .55rem;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+}
+.btn-worn-remove:hover {
+    background: #fee2e2;
+    color: #7f1d1d;
+}
+.btn-worn-remove:disabled {
+    opacity: .5;
+    cursor: default;
+}
+.worn-no-remove {
+    font-size: .78rem;
+    color: var(--color-text-muted);
+}
+
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 1.5rem 1rem;
+    border-bottom: 1px solid var(--rose-100);
+    flex-shrink: 0;
+}
+
+.modal-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--neutral-800);
+}
+
+.modal-close-btn {
+    background: none;
+    border: none;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    padding: .1rem .3rem;
+    border-radius: var(--radius-sm);
+    transition: color .15s, background .15s;
+}
+
+.modal-close-btn:hover {
+    color: var(--color-text);
+    background: var(--rose-100);
+}
+
+.modal-body {
+    padding: 1.25rem 1.5rem;
+}
+
+.modal-body--scroll {
+    overflow-y: auto;
+    flex: 1;
+}
+
+.modal-footer {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: 1rem 1.5rem 1.25rem;
+    border-top: 1px solid var(--rose-100);
+    flex-shrink: 0;
+    justify-content: space-between;
+}
+
+.modal-footer--right {
+    justify-content: flex-end;
+}
+
+/* ── Delete confirmation ─────────────────────────────────────── */
+.delete-confirm-text {
+    font-size: .95rem;
+    color: var(--neutral-600);
+    line-height: 1.55;
+}
+
+.delete-confirm-text strong {
+    color: var(--neutral-800);
+}
+
+.btn-danger {
+    background: #be123c;
+    color: #fff;
+    padding: .55rem 1.25rem;
+    font-size: .9rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    transition: background .15s;
+}
+
+.btn-danger:hover  { background: #9f1239; }
+.btn-danger:active { transform: translateY(1px); }
+.btn-danger:disabled { opacity: .6; cursor: not-allowed; }
+
+/* ══════════════════════════════════════════════════════════════
+   Outfit properties modal specifics
+   ══════════════════════════════════════════════════════════════ */
+
+/* Wear-options bar — sits below the modal header */
+.props-wear-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .75rem 1.5rem;
+    background: var(--rose-100);
+    border-bottom: 1px solid var(--rose-200);
+    flex-wrap: wrap;
+    flex-shrink: 0;
+}
+
+.wear-mode-groups {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+}
+
+.wear-mode-group {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+
+.wear-mode-group--sep {
+    padding-left: 1.25rem;
+    border-left: 1px solid var(--rose-300);
+}
+
+
+
+.wear-mode-label {
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--neutral-600);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    white-space: nowrap;
+}
+
+.wear-radio {
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .82rem;
+    color: var(--neutral-700, var(--neutral-800));
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.wear-radio input[type="radio"] {
+    accent-color: var(--color-primary);
+}
+
+/* Wear button in modal — slightly smaller */
+.btn-wear--modal {
+    flex: none;
+    width: auto;
+    padding: .4rem 1rem;
+    font-size: .82rem;
+}
+
+/* Remove button in modal — matches wear button sizing */
+.btn-remove--modal {
+    padding: .4rem 1rem;
+    font-size: .82rem;
+}
+
+/* Wear + Remove in the props modal bar — always side by side, left-aligned */
+.props-wear-actions {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* ── Property form rows ──────────────────────────────────────── */
+.props-row {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: .5rem 1rem;
+    align-items: start;
+    padding: .75rem 0;
+    border-bottom: 1px solid var(--rose-100);
+}
+
+.props-row:last-child { border-bottom: none; }
+
+.props-label {
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--neutral-600);
+    padding-top: .55rem; /* align with input text */
+    text-align: right;
+}
+
+.props-control { width: 100%; }
+
+/* ── Path row in properties modal ─────────────────────────── */
+
+/* Row containing the path input and its Edit button */
+.props-path-row {
+    display: flex;
+    gap: .5rem;
+    align-items: center;
+}
+
+.props-path-input {
+    flex: 1;
+    font-family: 'Courier New', monospace;
+    font-size: .82rem;
+    background: var(--neutral-50);
+    color: var(--color-text-muted);
+    transition: background .15s, color .15s, border-color .15s;
+}
+
+/* Read-only state: visually subdued */
+.props-path-input[readonly] {
+    background: var(--neutral-100);
+    border-color: var(--neutral-200);
+    color: var(--neutral-600);
+    cursor: default;
+}
+
+/* Edit mode: full contrast */
+.props-path-input--editing {
+    background: var(--color-surface) !important;
+    border-color: var(--peri-400) !important;
+    color: var(--color-text) !important;
+    cursor: text;
+    box-shadow: 0 0 0 3px rgba(132,145,220,.15);
+}
+
+/* Edit button normal state */
+.props-path-edit-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    white-space: nowrap;
+    font-size: .78rem;
+}
+
+/* Active (cancel) state */
+.props-path-edit-btn--active {
+    color: var(--rose-500);
+    border-color: var(--rose-300);
+    background: var(--rose-100);
+}
+.props-path-edit-btn--active:hover {
+    background: var(--rose-200);
+    border-color: var(--rose-400);
+}
+
+/* Hint text below the path row */
+.props-path-hint-text {
+    font-size: .72rem;
+    color: var(--color-text-muted);
+    margin-top: .3rem;
+    display: block;
+    line-height: 1.4;
+}
+
+/* Image row layout */
+.props-row--image { align-items: center; }
+
+.props-image-wrap {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+
+.props-image-preview-wrap {
+    flex-shrink: 0;
+    width: 90px;
+    height: 90px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--rose-100);
+    border: 1px solid var(--color-border);
+}
+
+.props-image-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.props-image-preview--clickable {
+    cursor: zoom-in;
+    transition: opacity .15s;
+}
+
+.props-image-preview--clickable:hover { opacity: .85; }
+
+.props-image-controls {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    justify-content: center;
+}
+
+/* Image upload status line */
+.image-upload-status {
+    font-size: .78rem;
+    min-height: 1.1em;
+}
+
+.image-upload-status--uploading {
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.image-upload-status--ok {
+    color: #15803d;
+    font-weight: 500;
+}
+
+.image-upload-status--error {
+    color: #9f1239;
+    font-weight: 500;
+}
+
+/* Textarea */
+.props-textarea {
+    resize: vertical;
+    min-height: 70px;
+    font-family: 'DM Sans', sans-serif;
+}
+
+/* Tags textarea — starts compact (2 lines), draggable downward to reveal all */
+.props-tags-area {
+    resize: vertical;
+    min-height: 2.6rem;  /* roughly 2 lines */
+    max-height: 12rem;
+    font-family: 'DM Sans', sans-serif;
+    line-height: 1.5;
+}
+
+/* ── Access radio group ──────────────────────────────────────── */
+.access-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.access-radio {
+    display: flex;
+    align-items: flex-start;
+    gap: .5rem;
+    cursor: pointer;
+}
+
+.access-radio input[type="radio"] {
+    margin-top: .2rem;
+    flex-shrink: 0;
+    accent-color: var(--color-primary);
+}
+
+.access-radio-label {
+    display: flex;
+    flex-direction: column;
+    gap: .1rem;
+}
+
+.access-radio-label strong {
+    font-size: .875rem;
+    color: var(--neutral-800);
+}
+
+.access-radio-hint {
+    font-size: .75rem;
+    color: var(--color-text-muted);
+}
+
+/* ── Responsive adjustments ──────────────────────────────────── */
+@media (max-width: 600px) {
+    .props-row {
+        grid-template-columns: 1fr;
+    }
+    .props-label {
+        text-align: left;
+        padding-top: 0;
+    }
+
+    /* Compact wear bar on small screens:
+       Scope and Method sit side by side in a 2-col grid,
+       keeping the bar short so the scrollable body gets room. */
+    .props-wear-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: .5rem;
+        padding: .6rem 1rem;
+    }
+
+    .wear-mode-groups {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: .4rem .75rem;
+        align-items: start;
+    }
+
+    .wear-mode-group {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .25rem;
+    }
+
+    /* Remove the vertical separator — the grid columns provide visual split */
+    .wear-mode-group--sep {
+        border-left: none;
+        padding-left: 0;
+    }
+
+    /* Wear + Remove: full-width flex row below the options */
+    .props-wear-actions {
+        display: flex;
+        gap: .5rem;
+        width: 100%;
+    }
+
+    .props-wear-actions .btn-wear--modal {
+        flex: 1;
+    }
+
+    .props-wear-actions .btn-remove--modal {
+        flex-shrink: 0;
+    }
+}
+
+/* On small screens, make the modal use the full viewport height
+   so the scrollable body actually has space to breathe */
+@media (max-width: 600px) {
+    .modal-backdrop {
+        align-items: flex-end;
+        padding: 0;
+    }
+
+    .modal-box {
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        max-height: 92vh;
+    }
+
+    /* Ensure the scrollable body always has a meaningful minimum height */
+    .modal-body--scroll {
+        min-height: 120px;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Lightbox — full-size image viewer
+   Sits above the properties modal (z-index 600 vs modal's 500)
+   ══════════════════════════════════════════════════════════════ */
+.lightbox-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 10, 12, .88);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 600;
+    padding: 1.5rem;
+    animation: modal-fade-in .15s ease;
+    cursor: zoom-out;
+}
+
+.lightbox-backdrop[hidden] { display: none; }
+
+.lightbox-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    max-width: 90vw;
+    max-height: 90vh;
+    cursor: default;
+}
+
+.lightbox-img {
+    display: block;
+    max-width: 100%;
+    max-height: calc(90vh - 4rem); /* leave room for close button */
+    border-radius: var(--radius-md);
+    box-shadow: 0 24px 64px rgba(0,0,0,.6);
+    object-fit: contain;
+}
+
+.lightbox-close {
+    flex-shrink: 0;
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    border-color: rgba(255,255,255,.25);
+    padding: .4rem 1.5rem;
+    font-size: .875rem;
+    transition: background .15s, border-color .15s;
+}
+
+.lightbox-close:hover {
+    background: rgba(255,255,255,.22);
+    border-color: rgba(255,255,255,.45);
+    color: #fff;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Outfit locking
+   ══════════════════════════════════════════════════════════════ */
+
+/* Padlock badge on outfit card image — bottom-left, always visible */
+.outfit-lock-badge {
+    position: absolute;
+    bottom: .4rem;
+    left: .4rem;
+    font-size: .9rem;
+    line-height: 1;
+    background: rgba(255,255,255,.82);
+    backdrop-filter: blur(4px);
+    border-radius: var(--radius-sm);
+    padding: .15rem .25rem;
+    pointer-events: none;
+}
+
+/* Subtle tint on locked card to reinforce state */
+.outfit-card--locked {
+    border-color: var(--peri-300);
+    background: var(--peri-100);
+}
+
+.outfit-card--locked .outfit-details {
+    background: var(--peri-100);
+}
+
+/* ── Lock bar in properties modal ─────────────────────────── */
+.props-lock-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .6rem 1.5rem;
+    background: var(--neutral-100);
+    border-bottom: 1px solid var(--neutral-200);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+.props-lock-bar--locked {
+    background: var(--peri-100);
+    border-bottom-color: var(--peri-200);
+}
+
+.props-lock-info {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+}
+
+.props-lock-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.props-lock-text {
+    font-size: .82rem;
+    color: var(--neutral-600);
+}
+
+.props-lock-bar--locked .props-lock-text {
+    color: var(--peri-500);
+    font-weight: 500;
+}
+
+.props-lock-actions {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    flex-shrink: 0;
+}
+
+/* Lock / Unlock toggle button */
+.btn-lock {
+    padding: .35rem .9rem;
+    font-size: .8rem;
+    font-weight: 500;
+    background: transparent;
+    color: var(--neutral-600);
+    border: 1.5px solid var(--neutral-200);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+}
+
+.btn-lock:hover {
+    background: var(--peri-100);
+    color: var(--peri-500);
+    border-color: var(--peri-300);
+}
+
+/* Locked state — filled periwinkle */
+.btn-lock--active {
+    background: var(--peri-400);
+    color: #fff;
+    border-color: var(--peri-400);
+}
+
+.btn-lock--active:hover {
+    background: var(--peri-500);
+    border-color: var(--peri-500);
+    color: #fff;
+}
+
+/* Force unlock — small, red, only shown when locked */
+.btn-force-unlock {
+    padding: .3rem .7rem;
+    font-size: .75rem;
+    font-weight: 500;
+    background: transparent;
+    color: #9f1239;
+    border: 1px solid #fecdd3;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background .15s, color .15s;
+}
+
+.btn-force-unlock:hover {
+    background: #fff1f3;
+}
+
+@media (max-width: 600px) {
+    .props-lock-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: .5rem;
+        padding: .6rem 1rem;
+    }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Removal Points UI
+   ══════════════════════════════════════════════════════════════ */
+
+/* Toggle checkbox row */
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    cursor: pointer;
+    font-size: .85rem;
+}
+.toggle-checkbox { accent-color: var(--color-primary); }
+.toggle-text { font-weight: 500; }
+
+/* Scope radio row */
+.removal-scope { margin-top: .6rem; }
+.removal-scope-radios {
+    display: flex;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    margin-bottom: .5rem;
+}
+
+/* Intro text in the defaults modal */
+.removal-modal-intro {
+    font-size: .85rem;
+    color: var(--neutral-600);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+/* Group accordion */
+.rp-groups { display: flex; flex-direction: column; gap: .4rem; }
+
+.rp-group {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.rp-group-header {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .55rem .75rem;
+    background: var(--rose-100);
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: 'DM Sans', sans-serif;
+    font-size: .83rem;
+    font-weight: 600;
+    color: var(--neutral-800);
+    transition: background .12s;
+}
+.rp-group-header:hover { background: var(--rose-200); }
+
+.rp-group-label { flex: 1; }
+
+.rp-group-count {
+    font-size: .75rem;
+    font-weight: 400;
+    color: var(--neutral-600);
+    white-space: nowrap;
+}
+
+.rp-chevron {
+    flex-shrink: 0;
+    transition: transform .18s;
+    color: var(--neutral-400);
+}
+.rp-group--open .rp-chevron { transform: rotate(90deg); }
+
+.rp-group-body {
+    display: none;
+    padding: .5rem .75rem .65rem;
+}
+.rp-group--open .rp-group-body { display: block; }
+
+/* Select all row */
+.rp-check-all-row {
+    padding-bottom: .35rem;
+    margin-bottom: .35rem;
+    border-bottom: 1px solid var(--rose-100);
+}
+.rp-check-all-label {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--neutral-600);
+    cursor: pointer;
+}
+.rp-check-all-label input { accent-color: var(--color-primary); }
+
+/* Point grid */
+.rp-points {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: .25rem 0;
+}
+
+.rp-point {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .8rem;
+    color: var(--neutral-800);
+    cursor: pointer;
+    padding: .2rem .75rem .2rem 0; /* right padding creates visual gap before next column */
+    white-space: nowrap; /* keep label on one line so checkbox always precedes its label */
+}
+.rp-point input[type="checkbox"] { accent-color: var(--color-primary); flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════════════════════
+   Private outfit card styling
+   ══════════════════════════════════════════════════════════════ */
+
+/* Warm rose tint — distinct from locked (periwinkle) */
+.outfit-card--private {
+    border-color: var(--rose-400);
+    background: var(--rose-100);
+}
+
+.outfit-card--private .outfit-details {
+    background: var(--rose-100);
+}
+
+/* Private badge — bottom-right of image, mirrors lock badge position */
+/* Private badge — bottom-right. Horizontally aligned with delete (top-right),
+   vertically aligned with lock (bottom-left). Each badge occupies its own corner. */
+.outfit-private-badge {
+    position: absolute;
+    bottom: .4rem;
+    right: .4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255,255,255,.82);
+    backdrop-filter: blur(4px);
+    border-radius: var(--radius-sm);
+    padding: .15rem;
+    pointer-events: none;
+    color: var(--rose-500);
+}
+
+/* When locked AND private both badges are on the bottom — keep them from overlapping */
+.outfit-card--locked.outfit-card--private .outfit-private-badge {
+    bottom: .4rem;
+    right: .4rem;
+}
+.outfit-card--locked.outfit-card--private .outfit-lock-badge {
+    bottom: .4rem;
+    left: .4rem;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   Filter bar
+   ══════════════════════════════════════════════════════════════ */
+
+.filter-bar {
+    margin-bottom: 1.25rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--neutral-50);
+    overflow: hidden;
+}
+
+/* Single collapsed row */
+.filter-bar-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .55rem .875rem;
+    min-height: 42px;
+    overflow: hidden; /* keep pills from wrapping */
+}
+
+/* Hide private label */
+.filter-private-label {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .82rem;
+    font-weight: 500;
+    color: var(--neutral-600);
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    user-select: none;
+}
+.filter-private-label input[type="checkbox"] {
+    accent-color: var(--color-primary);
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* Vertical divider between Hide Private and tags */
+.filter-bar-divider {
+    width: 1px;
+    height: 18px;
+    background: var(--color-border);
+    flex-shrink: 0;
+}
+
+/* Collapsed tag pills row — scrolls horizontally, never wraps */
+.filter-tags-collapsed {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    flex: 1;
+    overflow: hidden; /* clip overflow; pills are decorative only */
+    min-width: 0;
+}
+
+.filter-tag-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: .18rem .55rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 500;
+    background: var(--peri-100);
+    color: var(--peri-500);
+    border: 1px solid var(--peri-200);
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: background .12s, border-color .12s;
+}
+
+/* Active pill (tag is checked) */
+.filter-tag-pill--active {
+    background: var(--peri-400);
+    color: #fff;
+    border-color: var(--peri-400);
+}
+
+.filter-no-tags {
+    font-size: .78rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+/* Shown in collapsed row when no tags are selected */
+.filter-not-filtered {
+    font-size: .78rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+/* Clear button — collapsed row */
+.filter-clear-btn {
+    flex-shrink: 0;
+    padding: .2rem .6rem;
+    font-size: .75rem;
+    font-weight: 500;
+    background: transparent;
+    color: var(--rose-500);
+    border: 1px solid var(--rose-300);
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .12s, color .12s;
+}
+.filter-clear-btn:hover {
+    background: var(--rose-100);
+    color: var(--rose-600);
+}
+
+/* Expand toggle button */
+.filter-expand-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .25rem .65rem;
+    font-size: .78rem;
+    font-weight: 500;
+    background: transparent;
+    color: var(--neutral-600);
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background .12s, color .12s, border-color .12s;
+    user-select: none;
+}
+.filter-expand-btn:hover {
+    background: var(--peri-100);
+    color: var(--peri-500);
+    border-color: var(--peri-300);
+}
+
+.filter-chevron {
+    transition: transform .2s ease;
+    flex-shrink: 0;
+}
+
+/* ── Expanded panel ──────────────────────────────────────────── */
+
+.filter-bar-expanded {
+    border-top: 1px solid var(--color-border);
+    padding: .75rem .875rem .875rem;
+    background: var(--color-surface);
+    animation: filter-expand .15s ease;
+}
+
+@keyframes filter-expand {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.filter-expanded-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: .65rem;
+}
+
+.filter-expanded-title {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--neutral-600);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.filter-clear-btn--expanded {
+    /* Inherits .filter-clear-btn styles, no extra needed */
+}
+
+/* Tag checklist grid — wraps at whatever width is available */
+.filter-tag-checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem .75rem;
+}
+
+.filter-tag-check {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .82rem;
+    color: var(--neutral-700, var(--neutral-800));
+    cursor: pointer;
+    padding: .2rem .5rem .2rem .3rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    transition: background .1s, border-color .1s;
+    user-select: none;
+    white-space: nowrap;
+}
+.filter-tag-check:hover {
+    background: var(--peri-100);
+    border-color: var(--peri-200);
+}
+.filter-tag-check input[type="checkbox"] {
+    accent-color: var(--peri-500);
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.filter-tag-check:has(input:checked) {
+    background: var(--peri-100);
+    border-color: var(--peri-300);
+    color: var(--peri-500);
+    font-weight: 500;
+}
+
+/* No-results message below grid */
+.filter-no-results {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    font-size: .875rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+@media (max-width: 600px) {
+    .filter-bar-row {
+        gap: .5rem;
+        padding: .5rem .75rem;
+    }
+}
+
+/* ── Manage Links modal ─────────────────────────────────── */
+
+.links-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.links-count {
+    font-size: .85rem;
+    color: var(--color-text-muted);
+}
+
+.links-limit-note {
+    font-size: .82rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+.links-table-wrap {
+    overflow-x: auto;
+    margin-top: .5rem;
+}
+
+.links-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .875rem;
+}
+
+.links-table th {
+    text-align: left;
+    padding: .4rem .6rem;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.links-table td {
+    padding: .55rem .6rem;
+    border-bottom: 1px solid var(--color-border);
+    vertical-align: middle;
+}
+
+.links-table tr:last-child td {
+    border-bottom: none;
+}
+
+.links-table tr:hover td {
+    background: var(--peri-50, #f6f5ff);
+}
+
+.links-td-open {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.links-open-btn {
+    font-size: .8rem;
+    white-space: nowrap;
+}
+
+.links-no-label {
+    color: var(--color-text-muted);
+}
+
+.links-td-actions {
+    white-space: nowrap;
+}
+
+/* Small delete button for links table */
+.btn-delete-sm {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .25rem .55rem;
+    font-size: .78rem;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--color-danger, #e33);
+    color: var(--color-danger, #e33);
+    background: transparent;
+    cursor: pointer;
+    transition: background .15s, color .15s;
+    line-height: 1.4;
+}
+.btn-delete-sm:hover {
+    background: var(--color-danger, #e33);
+    color: #fff;
+}
+
+/* Radio label for link edit form */
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .875rem;
+    color: var(--color-text);
+    margin-top: .35rem;
+    cursor: pointer;
+}
+.radio-label input[type="radio"] {
+    accent-color: var(--peri-500);
+    cursor: pointer;
+}
+
+
+@media (max-width: 600px) {
+    .links-table th:nth-child(3),
+    .links-table td:nth-child(3) {
+        display: none;
+    }
+}
+
+/* ── View.php lightbox ──────────────────────────────────────── */
+.lightbox-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.82);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 700;
+    padding: 1rem;
+    cursor: pointer;
+}
+.lightbox-backdrop[hidden] { display: none; }
+
+.lightbox-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .75rem;
+    max-width: 90vw;
+    max-height: 90vh;
+    cursor: default;
+}
+
+.lightbox-img {
+    max-width: 100%;
+    max-height: 75vh;
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+}
+
+.lightbox-caption {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 500;
+    text-align: center;
+}
+
+.lightbox-close {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(255,255,255,.15);
+    border: none;
+    border-radius: 50%;
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #fff;
+    transition: background .15s;
+}
+.lightbox-close:hover {
+    background: rgba(255,255,255,.3);
+}
+
+/* Clickable outfit image in view.php */
+.outfit-image-wrap--clickable {
+    cursor: pointer;
+}
+.outfit-image-wrap--clickable:hover .outfit-image {
+    opacity: .88;
+    transition: opacity .15s;
+}
+
+/* ============================================================
+   OUTFIT PICKER — Base Outfits & Additional Items
+   ============================================================ */
+
+/* Outer wrapper — relative so dropdown can be absolute */
+.outfit-picker {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: .4rem;
+}
+
+/* Chip container — looks like a multi-value input box */
+.outfit-picker__chips {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem;
+    min-height: 2.2rem;
+    padding: .35rem .5rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    cursor: default;
+}
+
+/* Placeholder text when empty */
+.outfit-picker__placeholder {
+    font-size: .85rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+    line-height: 1.4;
+    padding: .1rem 0;
+}
+
+/* Individual chip */
+.outfit-picker__chip {
+    display: inline-flex;
+    align-items: center;
+    gap: .22rem;
+    padding: .18rem .42rem .18rem .28rem;
+    background: var(--peri-100);
+    border: 1px solid var(--peri-200);
+    border-radius: 999px;
+    font-size: .78rem;
+    font-weight: 500;
+    color: var(--peri-500);
+    cursor: default;
+    transition: background .12s, border-color .12s;
+    user-select: none;
+}
+
+.outfit-picker__chip--dragging {
+    opacity: .45;
+}
+
+.outfit-picker__chip--over {
+    border-color: var(--peri-400);
+    background: var(--peri-200);
+}
+
+/* ↕ drag handle */
+.outfit-picker__drag-handle {
+    cursor: grab;
+    font-size: .85rem;
+    color: var(--peri-300);
+    line-height: 1;
+    padding: 0 .1rem;
+    transition: color .12s;
+}
+.outfit-picker__chip:hover .outfit-picker__drag-handle {
+    color: var(--peri-400);
+}
+
+/* Outfit name inside chip */
+.outfit-picker__chip-name {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ↑ ↓ arrow buttons */
+.outfit-picker__arrow {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.1rem;
+    height: 1.1rem;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: var(--peri-400);
+    font-size: .7rem;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    flex-shrink: 0;
+}
+.outfit-picker__arrow:hover {
+    background: var(--peri-200);
+    color: var(--peri-500);
+}
+
+/* × remove button */
+.outfit-picker__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 50%;
+    color: var(--peri-300);
+    font-size: .85rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background .12s, color .12s;
+    flex-shrink: 0;
+}
+.outfit-picker__remove:hover {
+    background: var(--rose-100);
+    color: var(--rose-500);
+}
+
+/* + Add button */
+.outfit-picker__add-btn {
+    flex-shrink: 0;
+    align-self: flex-start;
+    padding: .35rem .75rem;
+    background: var(--peri-100);
+    border: 1px solid var(--peri-200);
+    border-radius: var(--radius-sm);
+    color: var(--peri-500);
+    font-size: .82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+    white-space: nowrap;
+    height: 2.2rem;
+    line-height: 1;
+}
+.outfit-picker__add-btn:hover {
+    background: var(--peri-200);
+    border-color: var(--peri-300);
+}
+
+/* Dropdown panel */
+.outfit-picker__dropdown {
+    position: absolute;
+    top: calc(100% + .35rem);
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+}
+
+/* Search input inside dropdown */
+.outfit-picker__search {
+    display: block;
+    width: 100%;
+    padding: .5rem .7rem;
+    border: none;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--neutral-50);
+    font-size: .85rem;
+    color: var(--color-text);
+    outline: none;
+}
+.outfit-picker__search:focus {
+    background: var(--rose-100);
+}
+
+/* List of available outfits */
+.outfit-picker__list {
+    list-style: none;
+    max-height: 220px;
+    overflow-y: auto;
+    margin: 0;
+    padding: .25rem 0;
+}
+
+.outfit-picker__list-item {
+    padding: .45rem .75rem;
+    font-size: .85rem;
+    cursor: pointer;
+    transition: background .1s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.outfit-picker__list-item:hover {
+    background: var(--peri-100);
+    color: var(--peri-500);
+}
+
+.outfit-picker__list-empty {
+    padding: .65rem .75rem;
+    font-size: .82rem;
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+/* ── HUD script version pills (Account modal) ────────────────── */
+.acct-version-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    align-items: center;
+}
+
+.version-pill {
+    display: inline-block;
+    font-size: .75rem;
+    font-weight: 500;
+    padding: .2rem .55rem;
+    border-radius: 999px;
+    letter-spacing: .01em;
+    white-space: nowrap;
+    background: var(--peri-100);
+    color: var(--peri-600);
+    border: 1px solid var(--peri-200);
+}
+
+/* ============================================================
+   THEME SELECTION MODAL
+   ============================================================ */
+
+/* List of theme options in the modal */
+.theme-list {
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+}
+
+/* Single theme row — styled as a radio card */
+.theme-option {
+    display: flex;
+    align-items: center;
+    gap: .85rem;
+    padding: .65rem .85rem;
+    border: 2px solid var(--color-border);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    user-select: none;
+}
+.theme-option:hover {
+    border-color: var(--color-primary);
+    background: var(--rose-100);
+}
+.theme-option--active {
+    border-color: var(--color-primary);
+    background: var(--rose-100);
+}
+
+/* Hide the actual radio input — the card IS the control */
+.theme-option input[type="radio"] {
+    display: none;
+}
+
+/* Small colour swatch / preview thumbnail */
+.theme-swatch {
+    width: 48px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: var(--neutral-100);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.theme-swatch img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Theme name text */
+.theme-info {
+    flex: 1;
+    min-width: 0;
+}
+.theme-name {
+    font-size: .9rem;
+    font-weight: 500;
+    color: var(--color-text);
+}
+
+/* Active indicator dot */
+.theme-option--active .theme-name::after {
+    content: ' ✓';
+    color: var(--color-primary);
+    font-weight: 700;
+}

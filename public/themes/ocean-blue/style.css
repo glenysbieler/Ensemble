@@ -1,0 +1,28 @@
+@import url('../default/style.css');  
+:root {
+     /* ── Palette — blue/teal replacing rose/periwinkle ── */
+     --rose-100:  #f0f8ff;   /* alice blue */
+     --rose-200:  #b8dff5;     
+     --rose-300:  #7cc0e8;    
+     --rose-400:  #3d9fd4;     
+     --rose-500:  #1a7eb8;   /* primary blue */     
+     --rose-600:  #105c8a;   /* darker on hover */     
+     
+     --peri-100:  #eef6fb;     
+     --peri-200:  #b8d8ee;     
+     --peri-300:  #6daed8;     
+     --peri-400:  #3d86b8;     
+     --peri-500:  #1e6490;      
+     
+     /* ── Semantic ───────────────────────────────────── */     
+     --color-bg:		#f5f9fc;     
+     --color-surface:		#ffffff;     
+     --color-border:		var(--rose-200);     
+     --color-primary:		var(--rose-500);
+     --color-primary-hov:	var(--rose-600);     
+     --color-accent:		var(--peri-400);
+     
+     /* ── Status ─────────────────────────────────────── */     
+     --color-online:  #0ea370;     
+     --color-stale:   #d4820a; 
+}

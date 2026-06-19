@@ -1,0 +1,374 @@
+/* ============================================================
+   Ensemble — Dark Theme
+   Deep slate background with rose & violet accents.
+   Playfair Display headings / DM Sans body.
+
+   HOW DARK THEMES WORK
+   ────────────────────
+   The entire Ensemble UI is built on CSS custom properties
+   (tokens). A dark theme only needs to redefine those tokens
+   in :root — every component picks up the new values
+   automatically. Structural rules (layout, spacing, radius,
+   fonts) are shared by importing the default theme first and
+   then overriding just the palette / semantic tokens here.
+
+   This file is self-contained: it imports the default CSS
+   so structure is always in sync, then overrides colour
+   tokens below.
+   ============================================================ */
+
+/* ── Import all structural rules from the default theme ──── */
+@import url('../default/style.css');
+
+/* ── Dark palette — overrides :root tokens only ───────────── */
+:root {
+    /* Re-map rose scale to darker, richer values */
+    --rose-100:  #2a1520;   /* was: #fdf2f5 — deep magenta-black surface */
+    --rose-200:  #3d1f2d;   /* was: #f9dde6 — border/hover tint */
+    --rose-300:  #7a3556;   /* was: #f2b8ca — mid accent */
+    --rose-400:  #c4567a;   /* was: #e889a8 — brighter accent */
+    --rose-500:  #e0708f;   /* was: #d4607f — primary action */
+    --rose-600:  #f090a8;   /* was: #b84068 — hover/active (lighter in dark) */
+
+    /* Re-map periwinkle scale */
+    --peri-100:  #1a1d2e;   /* was: #f0f1fb */
+    --peri-200:  #252847;   /* was: #d8dcf5 */
+    --peri-300:  #4a509e;   /* was: #b0b9ee */
+    --peri-400:  #7b87d4;   /* was: #8491dc */
+    --peri-500:  #9ba5e0;   /* was: #5f6ec7 */
+    --peri-600:  #b0b9ee;   /* used by version-pill */
+
+    /* Re-map neutrals to dark slate */
+    --neutral-50:  #16161a;
+    --neutral-100: #1e1e24;
+    --neutral-200: #28282f;
+    --neutral-400: #6e6e7a;
+    --neutral-600: #a8a8b8;
+    --neutral-800: #e0e0ea;
+    --neutral-900: #f0f0f5;
+
+    /* Semantic — dark mappings */
+    --color-bg:          #111115;
+    --color-surface:     #1c1c22;
+    --color-border:      #2e2e3a;
+    --color-text:        #dcdce8;
+    --color-text-muted:  #6e6e7a;
+    --color-primary:     var(--rose-500);
+    --color-primary-hov: var(--rose-600);
+    --color-accent:      var(--peri-400);
+
+    /* Status — same hues, keep readable on dark */
+    --color-online:  #34d470;
+    --color-stale:   #f5b841;
+    --color-offline: var(--neutral-400);
+
+    /* Shadows — use darker, more opaque values */
+    --shadow-sm:  0 1px 3px rgba(0,0,0,.35), 0 1px 2px rgba(0,0,0,.25);
+    --shadow-md:  0 4px 16px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.30);
+    --shadow-lg:  0 12px 40px rgba(0,0,0,.55), 0 4px 12px rgba(0,0,0,.35);
+}
+
+/* ── Body background — dark gradient ─────────────────────── */
+body {
+    background-color: var(--color-bg);
+    background-image:
+        radial-gradient(ellipse 60% 40% at 80% 0%,  rgba(200,80,120,.06) 0%, transparent 70%),
+        radial-gradient(ellipse 40% 30% at 10% 90%, rgba(90,80,180,.05)  0%, transparent 70%);
+}
+
+/* ── Header — dark glass ──────────────────────────────────── */
+.site-header {
+    background: rgba(28,28,34,.88);
+    border-bottom-color: var(--color-border);
+}
+
+/* ── Logo — remove the multiply blend used for white bg logo  */
+/* In dark mode the logo PNG has a white background that would */
+/* invert badly. We use 'screen' instead so white becomes      */
+/* transparent against the dark header.                        */
+.logo-img {
+    mix-blend-mode: screen;
+}
+
+/* ── Side menu ────────────────────────────────────────────── */
+.side-menu {
+    background: #1c1c24;
+    border-right-color: var(--color-border);
+}
+
+.side-menu-header {
+    border-bottom-color: var(--color-border);
+}
+
+.side-menu-title {
+    color: var(--neutral-800);
+}
+
+.side-menu-close:hover {
+    background: var(--rose-200);
+    color: var(--rose-500);
+}
+
+.hamburger-btn:hover {
+    background: var(--rose-200);
+    border-color: var(--rose-300);
+}
+
+/* ── Submenus ─────────────────────────────────────────────── */
+.side-submenu {
+    background: rgba(255,255,255,.03);
+    border-color: var(--color-border);
+}
+
+.side-submenu-item:hover {
+    background: var(--rose-200);
+    color: var(--rose-500);
+}
+
+.side-submenu--nested {
+    background: rgba(90,80,180,.08);
+    border-color: var(--peri-200);
+}
+.side-submenu--nested .side-submenu-item:hover {
+    background: var(--peri-200);
+    color: var(--peri-400);
+}
+
+/* ── Card / surface ───────────────────────────────────────── */
+.outfit-card {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+}
+
+.outfit-card:hover {
+    border-color: var(--rose-300);
+}
+
+/* ── Modals ───────────────────────────────────────────────── */
+.modal-backdrop {
+    background: rgba(0,0,0,.7);
+}
+
+.modal-box {
+    background: #1e1e26;
+    border: 1px solid var(--color-border);
+}
+
+.modal-header {
+    border-bottom-color: var(--color-border);
+}
+
+.modal-footer {
+    border-top-color: var(--color-border);
+}
+
+/* ── Form inputs ──────────────────────────────────────────── */
+.form-input,
+.form-textarea,
+.form-select {
+    background: #25252e;
+    border-color: var(--color-border);
+    color: var(--color-text);
+}
+
+.form-input:focus,
+.form-textarea:focus,
+.form-select:focus {
+    border-color: var(--rose-400);
+    background: #2a2a35;
+}
+
+/* ── Tabs ─────────────────────────────────────────────────── */
+.tab-bar {
+    border-bottom-color: var(--color-border);
+}
+
+.tab-btn {
+    color: var(--color-text-muted);
+}
+
+.tab-btn:hover {
+    color: var(--color-text);
+    background: rgba(255,255,255,.04);
+}
+
+.tab-btn--active {
+    color: var(--rose-500);
+    border-bottom-color: var(--rose-500);
+}
+
+/* ── Filter bar ───────────────────────────────────────────── */
+.filter-bar {
+    background: var(--color-surface);
+    border-color: var(--color-border);
+}
+
+.filter-input {
+    background: #25252e;
+    border-color: var(--color-border);
+    color: var(--color-text);
+}
+
+.filter-tag-btn {
+    background: var(--peri-200);
+    border-color: var(--peri-300);
+    color: var(--peri-400);
+}
+
+.filter-tag-btn:hover,
+.filter-tag-btn--active {
+    background: var(--peri-300);
+    border-color: var(--peri-400);
+    color: var(--neutral-900);
+}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.btn-primary {
+    background: var(--rose-500);
+    border-color: var(--rose-500);
+}
+.btn-primary:hover {
+    background: var(--rose-600);
+    border-color: var(--rose-600);
+}
+
+.btn-secondary {
+    background: transparent;
+    border-color: var(--color-border);
+    color: var(--color-text);
+}
+.btn-secondary:hover {
+    background: rgba(255,255,255,.05);
+    border-color: var(--neutral-400);
+}
+
+/* ── Outfit picker chips ──────────────────────────────────── */
+.outfit-picker__chips {
+    background: #25252e;
+    border-color: var(--color-border);
+}
+
+.outfit-picker__chip {
+    background: var(--peri-200);
+    border-color: var(--peri-300);
+    color: var(--peri-400);
+}
+
+.outfit-picker__chip--over {
+    background: var(--peri-300);
+    border-color: var(--peri-400);
+}
+
+.outfit-picker__add-btn {
+    background: var(--peri-200);
+    border-color: var(--peri-300);
+    color: var(--peri-400);
+}
+.outfit-picker__add-btn:hover {
+    background: var(--peri-300);
+    border-color: var(--peri-400);
+}
+
+.outfit-picker__dropdown {
+    background: #22222c;
+    border-color: var(--color-border);
+}
+
+.outfit-picker__search {
+    background: #1c1c24;
+    border-bottom-color: var(--color-border);
+    color: var(--color-text);
+}
+.outfit-picker__search:focus {
+    background: var(--rose-100);
+}
+
+.outfit-picker__list-item:hover {
+    background: var(--peri-100);
+    color: var(--peri-400);
+}
+
+/* ── Toast notifications ──────────────────────────────────── */
+.toast {
+    background: #2a2a36;
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+/* ── Table (links, account) ───────────────────────────────── */
+.links-table thead {
+    background: var(--rose-100);
+}
+
+.links-table th {
+    color: var(--neutral-600);
+    border-bottom-color: var(--color-border);
+}
+
+.links-table td {
+    border-bottom-color: var(--color-border);
+}
+
+.links-table tr:hover td {
+    background: rgba(255,255,255,.03);
+}
+
+/* ── Section headings ─────────────────────────────────────── */
+.section-label {
+    color: var(--color-text-muted);
+    border-bottom-color: var(--color-border);
+}
+
+/* ── Empty state ──────────────────────────────────────────── */
+.empty-state {
+    color: var(--color-text-muted);
+}
+
+/* ── Status badge ─────────────────────────────────────────── */
+.status-badge {
+    background: rgba(255,255,255,.05);
+}
+
+/* ── Version pills (Account modal) ───────────────────────── */
+.version-pill {
+    background: var(--peri-200);
+    color: var(--peri-400);
+    border-color: var(--peri-300);
+}
+
+/* ── Props modal attachment-point accordion ───────────────── */
+.ap-group-header {
+    background: var(--neutral-100);
+    border-color: var(--color-border);
+}
+
+.ap-group-body {
+    background: rgba(255,255,255,.02);
+    border-color: var(--color-border);
+}
+
+.ap-checkbox-label:hover {
+    background: rgba(255,255,255,.04);
+}
+
+/* ── Login card ───────────────────────────────────────────── */
+.login-card {
+    background: #1e1e26;
+    border: 1px solid var(--color-border);
+}
+
+/* ── Scrollbar — subtle dark style ────────────────────────── */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+::-webkit-scrollbar-track {
+    background: var(--neutral-100);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--neutral-200);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--neutral-400);
+}
