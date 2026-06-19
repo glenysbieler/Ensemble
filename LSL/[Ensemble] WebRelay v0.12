@@ -1,0 +1,465 @@
+Ensemble] WebRelay v0.12
+// ============================================================
+// Ensemble HUD - Web Relay Script
+// Version: 0.12
+// ============================================================
+// Responsibilities:
+//   - Obtain and maintain a simulator URL via llRequestURL()
+//   - Pass that URL to the main script via link message (LM_RELAY_URL)
+//   - Receive and validate inbound HTTP commands from the web panel
+//   - Route valid commands to the main script via link message
+//
+// Separation rationale:
+//   - llRequestURL() consumes one of the region's HTTP-in slots
+//   - Isolating URL management here keeps the main script clean
+//   - On region change, only this script needs to re-register
+//   - The relay has one job: be the network-facing endpoint
+//
+// Changes from v0.11:
+//   - g_debugMode flag added, mirroring Core's debug state.
+//     Received via LM_DEBUG_SYNC (channel 109) link message,
+//     which Core sends on startup and whenever debug is toggled.
+//   - rdbg() helper added — same pattern as Core's dbg().
+//   - All routine operational llOwnerSay messages converted to
+//     rdbg() so they are silent unless debug mode is on:
+//       [Relay] Requesting simulator URL...
+//       [Relay] Simulator URL obtained: ...
+//       [Relay] Region change -- re-registering URL.
+//       [Relay] Core reset detected -- re-sending existing URL.
+//       [Relay] Routed wear/remove/rlv_lock/detach_item/...
+//       [Relay] Responded to get_worn / check_rlv
+//   - Error and warning messages (URL denied, invalid UUID,
+//     unknown command) remain visible regardless of debug mode.
+//   - Requires Core v0.36 or later for LM_DEBUG_SYNC support.
+//     With an older Core the relay defaults to g_debugMode=0
+//     (silent) until a sync message arrives.
+//   - RELAY_VERSION bumped to "0.12".
+//
+// Changes from v0.10:
+//   - RELAY_VERSION constant added ("0.11"). The relay's version
+//     is included in the LM_RELAY_URL payload so Core can send it
+//     to the website on every checkin/heartbeat for support and
+//     compatibility tracking.
+//   - LM_RELAY_URL payload format changed from:
+//       "<sim_url>"
+//     to:
+//       "<sim_url>|<relay_version>"
+//     The pipe character (|) is not a valid unencoded URL character
+//     so there is no ambiguity. Core splits on the first "|" to
+//     extract both values.
+//   - Both the URL-obtained handler and the LM_RELAY_REGISTER
+//     re-send path now use the new payload format.
+// ============================================================
+ 
+// ── Version ──────────────────────────────────────────────────
+string RELAY_VERSION = "0.12";
+ 
+// ── Link message channels (must match Core) ──────────────────
+integer LM_RELAY_REGISTER = 100;   // Core → relay: "request a URL"
+integer LM_RELAY_URL      = 101;   // relay → Core: "here is the current sim URL"
+integer LM_OUTFIT_COMMAND = 102;   // relay → Core: incoming wear/remove command
+integer LM_PASSWORD_SET   = 103;   // relay → Core: web confirmed password was set
+integer LM_RLV_LOCK       = 104;   // relay → Core: lock/unlock an outfit folder
+integer LM_DETACH_ITEM    = 105;   // relay → Core: detach a specific attachment point
+integer LM_RLV_CHECK      = 106;   // relay → Core: check if RLV is enabled (@version probe)
+integer LM_RLV_STATUS     = 107;   // Core → relay: result of RLV check ("true|version" or "false|")
+integer LM_RLV_COMMAND    = 108;   // relay → Core: send a raw RLV command string
+integer LM_DEBUG_SYNC     = 109;   // Core → relay: push current debug mode ("0" or "1")
+ 
+// ── State ───────────────────────────────────────────────────
+string  g_simURL    = "";  // current llRequestURL() URL
+integer g_debugMode = 0;   // mirrors Core's debug flag — set via LM_DEBUG_SYNC
+ 
+// Relay dbg helper — mirrors Core's pattern.
+rdbg(string msg)
+{
+    if (g_debugMode) llOwnerSay(msg);
+}
+ 
+// Held HTTP requestID for the async check_rlv flow.
+key g_pendingRLVCheckRequest = NULL_KEY;
+ 
+// ============================================================
+// URL MANAGEMENT
+// ============================================================
+ 
+requestURL()
+{
+    if (g_simURL != "")
+    {
+        llReleaseURL(g_simURL);
+        g_simURL = "";
+    }
+    llRequestURL();
+    rdbg("[Relay] Requesting simulator URL...");
+}
+ 
+// ============================================================
+// REQUEST PARSING
+// ============================================================
+ 
+// Extract value for a key from a URL-encoded POST body.
+// PHP's http_build_query encodes spaces as '+' (not %20), so we
+// replace '+' with '%20' before calling llUnescapeURL.
+string getParam(string body, string paramName)
+{
+    list pairs = llParseString2List(body, ["&"], []);
+    integer i;
+    for (i = 0; i < llGetListLength(pairs); i++)
+    {
+        string pair = llList2String(pairs, i);
+        integer eq  = llSubStringIndex(pair, "=");
+        if (eq != -1)
+        {
+            if (llGetSubString(pair, 0, eq - 1) == paramName)
+            {
+                string raw = llGetSubString(pair, eq + 1, -1);
+                raw = llDumpList2String(llParseString2List(raw, ["+"], []), "%20");
+                return llUnescapeURL(raw);
+            }
+        }
+    }
+    return "";
+}
+ 
+// ============================================================
+// ATTACHMENT POINT NAME HELPER
+// ============================================================
+ 
+string wornAttachPointName(integer ap)
+{
+    if (ap == ATTACH_CHEST)      return "Chest";
+    if (ap == ATTACH_HEAD)       return "Skull";
+    if (ap == ATTACH_LSHOULDER)  return "Left Shoulder";
+    if (ap == ATTACH_RSHOULDER)  return "Right Shoulder";
+    if (ap == ATTACH_LHAND)      return "Left Hand";
+    if (ap == ATTACH_RHAND)      return "Right Hand";
+    if (ap == ATTACH_LFOOT)      return "Left Foot";
+    if (ap == ATTACH_RFOOT)      return "Right Foot";
+    if (ap == ATTACH_BACK)       return "Spine";
+    if (ap == ATTACH_PELVIS)     return "Pelvis";
+    if (ap == ATTACH_MOUTH)      return "Mouth";
+    if (ap == ATTACH_CHIN)       return "Chin";
+    if (ap == ATTACH_LEAR)       return "Left Ear";
+    if (ap == ATTACH_REAR)       return "Right Ear";
+    if (ap == ATTACH_LEYE)       return "Left Eye";
+    if (ap == ATTACH_REYE)       return "Right Eye";
+    if (ap == ATTACH_NOSE)       return "Nose";
+    if (ap == ATTACH_RUARM)      return "R Upper Arm";
+    if (ap == ATTACH_RLARM)      return "R Forearm";
+    if (ap == ATTACH_LUARM)      return "L Upper Arm";
+    if (ap == ATTACH_LLARM)      return "L Forearm";
+    if (ap == ATTACH_RHIP)       return "Right Hip";
+    if (ap == ATTACH_RULEG)      return "R Upper Leg";
+    if (ap == ATTACH_RLLEG)      return "R Lower Leg";
+    if (ap == ATTACH_LHIP)       return "Left Hip";
+    if (ap == ATTACH_LULEG)      return "L Upper Leg";
+    if (ap == ATTACH_LLLEG)      return "L Lower Leg";
+    if (ap == ATTACH_BELLY)      return "Stomach";
+    if (ap == ATTACH_LEFT_PEC)   return "Left Pec";
+    if (ap == ATTACH_RIGHT_PEC)  return "Right Pec";
+    if (ap == ATTACH_HUD_CENTER_2)    return "HUD Center 2";
+    if (ap == ATTACH_HUD_TOP_RIGHT)   return "HUD Top Right";
+    if (ap == ATTACH_HUD_TOP_CENTER)  return "HUD Top";
+    if (ap == ATTACH_HUD_TOP_LEFT)    return "HUD Top Left";
+    if (ap == ATTACH_HUD_CENTER_1)    return "HUD Center";
+    if (ap == ATTACH_HUD_BOTTOM_LEFT) return "HUD Bottom Left";
+    if (ap == ATTACH_HUD_BOTTOM)      return "HUD Bottom";
+    if (ap == ATTACH_HUD_BOTTOM_RIGHT)return "HUD Bottom Right";
+    if (ap == 39) return "Neck";
+    if (ap == 40) return "Avatar Center";
+    if (ap == 41) return "Left Ring Finger";
+    if (ap == 42) return "Right Ring Finger";
+    if (ap == 43) return "Tail Base";
+    if (ap == 44) return "Tail Tip";
+    if (ap == 45) return "Left Wing";
+    if (ap == 46) return "Right Wing";
+    if (ap == 47) return "Jaw";
+    if (ap == 48) return "Alt Left Ear";
+    if (ap == 49) return "Alt Right Ear";
+    if (ap == 50) return "Alt Left Eye";
+    if (ap == 51) return "Alt Right Eye";
+    if (ap == 52) return "Tongue";
+    if (ap == 53) return "Groin";
+    if (ap == 54) return "Left Hind Foot";
+    if (ap == 55) return "Right Hind Foot";
+    return "point_" + (string)ap;
+}
+ 
+// ============================================================
+// REQUEST HANDLING
+// ============================================================
+ 
+handleRequest(key requestID, string method, string body)
+{
+    // Only accept POST
+    if (method != "POST")
+    {
+        llHTTPResponse(requestID, 405, "Method Not Allowed");
+        return;
+    }
+ 
+    // Validate access UUID against the current owner's UUID.
+    // The access UUID is now always the plain avatar UUID
+    // (standard hyphenated format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx).
+    // We compare directly against llGetOwner() — no cached value needed.
+    string incomingUUID = getParam(body, "access_uuid");
+    if (incomingUUID == "" || incomingUUID != (string)llGetOwner())
+    {
+        llHTTPResponse(requestID, 403, "Forbidden");
+        llOwnerSay("[Relay] Rejected request -- invalid access UUID.");
+        return;
+    }
+ 
+    // Route by command
+    string command = getParam(body, "command");
+ 
+    if (command == "wear")
+    {
+        string folder        = getParam(body, "folder");
+        string wearMode      = getParam(body, "wear_mode");
+        string removalPoints = getParam(body, "removal_points");
+        if (folder == "")
+        {
+            llHTTPResponse(requestID, 400, "Bad Request: missing folder");
+            return;
+        }
+        if (wearMode == "") wearMode = "subfolders_replace";
+        llMessageLinked(LINK_SET, LM_OUTFIT_COMMAND, "wear|" + folder + "|" + wearMode + "|" + removalPoints, NULL_KEY);
+        llHTTPResponse(requestID, 200, "OK");
+        rdbg("[Relay] Routed wear command: " + folder + " (mode: " + wearMode
+                 + (removalPoints != "" ? ", removing " + removalPoints : "") + ")");
+    }
+    else if (command == "remove")
+    {
+        string folder   = getParam(body, "folder");
+        string wearMode = getParam(body, "wear_mode");
+        if (folder == "")
+        {
+            llHTTPResponse(requestID, 400, "Bad Request: missing folder");
+            return;
+        }
+        if (wearMode == "") wearMode = "subfolders_replace";
+        llMessageLinked(LINK_SET, LM_OUTFIT_COMMAND, "remove|" + folder + "|" + wearMode, NULL_KEY);
+        llHTTPResponse(requestID, 200, "OK");
+        rdbg("[Relay] Routed remove command: " + folder + " (mode: " + wearMode + ")");
+    }
+    else if (command == "rlv_lock")
+    {
+        string folder   = getParam(body, "folder");
+        string rlvValue = getParam(body, "rlv_value");
+        string wearMode = getParam(body, "wear_mode");
+        if (folder == "")
+        {
+            llHTTPResponse(requestID, 400, "Bad Request: missing folder");
+            return;
+        }
+        if (rlvValue != "n" && rlvValue != "y") rlvValue = "y";
+        if (wearMode == "") wearMode = "subfolders_replace";
+        llMessageLinked(LINK_SET, LM_RLV_LOCK, folder + "|" + rlvValue + "|" + wearMode, NULL_KEY);
+        llHTTPResponse(requestID, 200, "OK");
+        string action = (rlvValue == "n") ? "lock" : "unlock";
+        rdbg("[Relay] Routed rlv_lock command: " + action + " " + folder + " (" + wearMode + ")");
+    }
+    else if (command == "get_worn")
+    {
+        list nonDetachPoints = [];
+ 
+        list attached = llGetAttachedList(llGetOwner());
+        string jsonArr = "[";
+        integer total  = llGetListLength(attached);
+        integer i;
+        for (i = 0; i < total; i++)
+        {
+            key    objKey  = llList2Key(attached, i);
+            list   details = llGetObjectDetails(objKey,
+                                 [OBJECT_NAME, OBJECT_ATTACHED_POINT]);
+            string itemName = llList2String(details, 0);
+            integer apInt  = llList2Integer(details, 1);
+ 
+            string pointName = wornAttachPointName(apInt);
+ 
+            itemName = llDumpList2String(
+                llParseString2List(itemName, ["\""], []), "\\\"");
+ 
+            integer canDetach = (llListFindList(nonDetachPoints, [pointName]) == -1);
+ 
+            if (i > 0) jsonArr += ",";
+            jsonArr += "{\"point\":\"" + pointName
+                     + "\",\"point_int\":" + (string)apInt
+                     + ",\"item\":\"" + itemName
+                     + "\",\"can_detach\":" + (string)canDetach + "}";
+        }
+        jsonArr += "]";
+ 
+        llHTTPResponse(requestID, 200, "{\"items\":" + jsonArr + "}");
+        rdbg("[Relay] Responded to get_worn (" + (string)total + " items).");
+    }
+    else if (command == "detach_item")
+    {
+        string point = getParam(body, "point");
+        if (point == "")
+        {
+            llHTTPResponse(requestID, 400, "Bad Request: missing point");
+            return;
+        }
+        llMessageLinked(LINK_SET, LM_DETACH_ITEM, point, NULL_KEY);
+        llHTTPResponse(requestID, 200, "OK");
+        rdbg("[Relay] Routed detach_item: " + point);
+    }
+    else if (command == "passwordset")
+    {
+        llMessageLinked(LINK_SET, LM_PASSWORD_SET, "", NULL_KEY);
+        llHTTPResponse(requestID, 200, "OK");
+        rdbg("[Relay] Routed passwordset confirmation to Core.");
+    }
+    else if (command == "check_rlv")
+    {
+        if (g_pendingRLVCheckRequest != NULL_KEY)
+        {
+            llHTTPResponse(requestID, 503, "RLV check already in progress");
+            rdbg("[Relay] check_rlv rejected -- another check already in flight.");
+            return;
+        }
+        g_pendingRLVCheckRequest = requestID;
+        llMessageLinked(LINK_SET, LM_RLV_CHECK, "", NULL_KEY);
+        rdbg("[Relay] Routed check_rlv to Core -- awaiting @version response.");
+    }
+    else if (command == "rlv_command")
+    {
+        string rlvCmd = getParam(body, "rlv_cmd");
+        if (rlvCmd == "")
+        {
+            llHTTPResponse(requestID, 400, "Bad Request: missing rlv_cmd");
+            return;
+        }
+        llMessageLinked(LINK_SET, LM_RLV_COMMAND, rlvCmd, NULL_KEY);
+        llHTTPResponse(requestID, 200, "OK");
+        rdbg("[Relay] Routed rlv_command: " + rlvCmd);
+    }
+    else if (command == "ping")
+    {
+        llHTTPResponse(requestID, 200, "pong");
+    }
+    else if (command == "status")
+    {
+        llHTTPResponse(requestID, 200, "{\"status\":\"online\"}");
+    }
+    else
+    {
+        llHTTPResponse(requestID, 400, "Bad Request: unknown command");
+        llOwnerSay("[Relay] Unknown command: " + command);
+    }
+}
+ 
+// ============================================================
+// STATE MACHINE
+// ============================================================
+ 
+default
+{
+    state_entry()
+    {
+        requestURL();
+    }
+ 
+    on_rez(integer param)
+    {
+        llResetScript();
+    }
+ 
+    http_request(key id, string method, string body)
+    {
+        if (method == URL_REQUEST_GRANTED)
+        {
+            g_simURL = body;
+            rdbg("[Relay] Simulator URL obtained: " + g_simURL);
+            // Send sim URL and relay version to Core as "url|version".
+            // Core splits on the first "|" to extract both values and
+            // includes relay_version in every subsequent checkin POST.
+            llMessageLinked(LINK_SET, LM_RELAY_URL, g_simURL + "|" + RELAY_VERSION, NULL_KEY);
+            return;
+        }
+ 
+        if (method == URL_REQUEST_DENIED)
+        {
+            llOwnerSay("[Relay] Could not obtain simulator URL: " + body);
+            llOwnerSay("  Region may be at its HTTP-in limit.");
+            llOwnerSay("  Web-initiated commands unavailable until a URL is obtained.");
+            llOwnerSay("  Will retry on next reset or region change.");
+            return;
+        }
+ 
+        handleRequest(id, method, body);
+    }
+ 
+    link_message(integer sender, integer num, string str, key id)
+    {
+        if (num == LM_RELAY_REGISTER)
+        {
+            // Core is asking for a sim URL — sent when Core resets alone
+            // while the relay is still running.
+            // If we already have a URL, re-send it immediately rather than
+            // requesting a new one. This avoids discarding a working URL
+            // and prevents the double-request that occurred when both scripts
+            // started together and Core also sent "request_url" on init.
+            if (str == "request_url")
+            {
+                if (g_simURL != "")
+                {
+                    rdbg("[Relay] Core reset detected -- re-sending existing URL.");
+                    // Include relay version in re-sent payload, same as on fresh URL grant.
+                    llMessageLinked(LINK_SET, LM_RELAY_URL, g_simURL + "|" + RELAY_VERSION, NULL_KEY);
+                }
+                else
+                {
+                    // No URL yet — request one normally
+                    requestURL();
+                }
+            }
+        }
+        else if (num == LM_RLV_STATUS)
+        {
+            // Core has finished the @version probe.
+            // str format: "true|RestrainedLove viewer v2.x.x.x" or "false|"
+            if (g_pendingRLVCheckRequest == NULL_KEY)
+            {
+                llOwnerSay("[Relay] LM_RLV_STATUS received but no pending request -- discarding.");
+                return;
+            }
+ 
+            list   parts      = llParseString2List(str, ["|"], []);
+            string rlvEnabled = llList2String(parts, 0);
+            string rlvVersion = llList2String(parts, 1);
+ 
+            string json;
+            if (rlvEnabled == "true")
+                json = "{\"rlv\":true,\"version\":\"" + rlvVersion + "\"}";
+            else
+                json = "{\"rlv\":false,\"version\":\"\"}";
+ 
+            llHTTPResponse(g_pendingRLVCheckRequest, 200, json);
+            g_pendingRLVCheckRequest = NULL_KEY;
+            rdbg("[Relay] Responded to check_rlv: rlv=" + rlvEnabled
+                     + (rlvVersion != "" ? " (" + rlvVersion + ")" : ""));
+        }
+        else if (num == LM_DEBUG_SYNC)
+        {
+            g_debugMode = (integer)str;
+        }
+    }
+ 
+    changed(integer change)
+    {
+        if (change & (CHANGED_REGION | CHANGED_REGION_START | CHANGED_TELEPORT))
+        {
+            rdbg("[Relay] Region change -- re-registering URL.");
+            requestURL();
+        }
+        if (change & CHANGED_OWNER)
+        {
+            llResetScript();
+        }
+    }
+}
+ 
