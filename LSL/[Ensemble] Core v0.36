@@ -1,0 +1,1570 @@
+// ============================================================
+// Ensemble HUD - Main Script
+// Version: 0.36
+// ============================================================
+// Responsibilities:
+//   1. Present menu on touch
+//   2. Settings submenu (web URL, heartbeat frequency, access code,
+//      reset defaults, reset password, debug toggle)
+//   3. "Create Outfit" - prompt for folder path, send to web
+//   4. Heartbeat loop - keep web panel sim URL current
+//   5. HTTP checkin, heartbeat, outfit create, temp password
+//   6. HUD lock/unlock — prevents accidental removal when wearing outfits
+//   7. Password bootstrap — generates temp password on first run or
+//      on manual reset; IMs owner; POSTs hash to web panel
+//   8. Checkin response syncs g_pwSet from server pw_set field so
+//      temp password is not re-sent if the account already has a password.
+//   9. Outfit folder locking — re-issues @detachthis restrictions on
+//      heartbeat so locks survive relog and region crossing
+//  10. RLV check — responds to LM_RLV_CHECK by probing @version on a
+//      private listen channel, then reporting back via LM_RLV_STATUS.
+//      Uses a dedicated 3-second timer slot (g_rlvCheckTimer).
+//  11. RLV command — responds to LM_RLV_COMMAND by issuing the raw
+//      command string via llOwnerSay. Fire-and-forget.
+//
+// Persistence:
+//   Root prim  description : web panel URL (raw string, up to 127 chars)
+//   Child prim 1 description: (unused — reserved for future use)
+//   Child prim 2 description: key=value pairs separated by |
+//                             hb=N  — heartbeat interval in minutes (1, 3, or 5)
+//                             lk=N  — HUD locked (1) or unlocked (0)
+//                             pws=N — password set by user (1) or not yet (0)
+//                             dbg=N — debug mode on (1) or off (0)
+//                             ac=S  — access code (arbitrary string, may be empty)
+//                             e.g. "hb=3|lk=0|pws=1|dbg=0|ac=mysecret"
+//
+// Access UUID:
+//   From v0.22 onward, the access UUID is simply llGetOwner() — the
+//   avatar's permanent grid UUID. The previous MD5-derived value added
+//   complexity without adding security once passwords were required, and
+//   caused a poor upgrade experience (every new HUD copy generated a
+//   different UUID, requiring a manual "Link Account" step). With a plain
+//   owner UUID, a new HUD worn by the same person checks in, finds the
+//   existing account, and just works. The "Link Account" feature is removed.
+//
+// Settings prim format migration (v0.7 → v0.8):
+//   Old format was positional: "60|1" (seconds | locked)
+//   New format is key=value:   "hb=1|lk=1|pws=0"
+//   loadPersistence() detects the old format (bare integer in field 0)
+//   and migrates it automatically on first run after upgrade.
+//
+// Separate script: [Ensemble] WebRelay handles inbound web commands
+//   and holds the current sim URL, passing it via link message.
+//   WebRelay v0.11: LM_RELAY_URL payload is now "sim_url|relay_version"
+//   so Core can report relay version to the website on every checkin.
+//   Old relay versions that send only the URL are handled gracefully.
+//
+// Changes from v0.35:
+//   - LM_DEBUG_SYNC (channel 109) added. Core pushes its g_debugMode
+//     value ("0" or "1") to the relay via this link message on startup
+//     and whenever debug mode is toggled. WebRelay v0.12 receives this
+//     and suppresses its verbose llOwnerSay messages when debug is off.
+//   - syncDebugToRelay() helper added; called from initialise() and
+//     toggleDebugMode().
+//   - CORE_VERSION bumped to "0.36".
+//
+// Changes from v0.34:
+//   - "Connected -- existing account recognised." checkin message is now
+//     debug-only (via dbg()). It fired on every region crossing and was
+//     noisy with no actionable content. The "new account created" message
+//     remains visible as it is a meaningful first-time event.
+//   - CORE_VERSION bumped to "0.35".
+//
+// Changes from v0.33:
+//   - Bug fix: in the checkin http_response handler, the server pw_set sync
+//     now runs BEFORE the doPasswordReset() check. Previously the order was
+//     reversed: a HUD on a second computer (where prim storage had pws=0)
+//     would call doPasswordReset() on every checkin — including region
+//     crossings — overwriting the user's real password with a new temp one
+//     even though the server already had pw_set=1. The server response is
+//     now the authoritative source and is applied first.
+//   - CORE_VERSION bumped to "0.34".
+//
+// Changes from v0.32:
+//   - Button label "New Password" shortened to "New Passwd" and
+//     "Set Password" shortened to "Set Passwd" — both were truncating
+//     in the SL/OpenSim dialog button (12 chars > button limit).
+//   - CORE_VERSION bumped to "0.33".
+//
+// Changes from v0.31:
+//   - Button label "Open Website" shortened to "Website" (was truncating
+//     to "Open Websit" in the SL/OpenSim dialog button).
+//   - Button label "Reset Password" renamed to "New Password" (was
+//     truncating to "Reset Passwo"). Listen handler updated to match.
+//   - CORE_VERSION bumped to "0.32".
+//
+// Changes from v0.30:
+//   - Bug fix: initialise() now always sends LM_RELAY_REGISTER to request a
+//     fresh sim URL from the relay. Previously, after an owner-change
+//     llResetScript(), the relay was already running and would not re-send
+//     LM_RELAY_URL spontaneously, so sendCheckin() (and therefore
+//     doPasswordReset()) never fired on a transferred HUD. The redundant
+//     request on normal startup is harmless — the handler just overwrites
+//     g_simURL with the same value.
+//   - CORE_VERSION bumped to "0.31".
+// ============================================================
+ 
+// ── Version ──────────────────────────────────────────────────
+string  CORE_VERSION        = "0.36";
+ 
+// ── Link message channels (must match WebRelay) ───────────
+integer LM_RELAY_REGISTER  = 100;   // HUD → relay: "request a URL"
+integer LM_RELAY_URL       = 101;   // relay → HUD: "here is the current sim URL"
+integer LM_OUTFIT_COMMAND  = 102;   // relay → HUD: incoming wear command
+integer LM_PASSWORD_SET    = 103;   // relay → HUD: web confirmed password was set
+integer LM_RLV_LOCK        = 104;   // relay → HUD: lock/unlock an outfit folder
+integer LM_DETACH_ITEM     = 105;   // relay → HUD: detach a specific attachment point
+integer LM_RLV_CHECK       = 106;   // relay → HUD: probe @version to check RLV status
+integer LM_RLV_STATUS      = 107;   // HUD → relay: result of @version probe
+integer LM_RLV_COMMAND     = 108;   // relay → HUD: issue a raw RLV command string
+integer LM_DEBUG_SYNC      = 109;   // HUD → relay: push current debug mode (str = "0" or "1")
+ 
+// ── Listen channels ─────────────────────────────────────────
+integer MENU_CHANNEL;
+integer INPUT_CHANNEL;
+integer SUBMENU_CHANNEL;
+integer CONFIRM_CHANNEL;
+key     g_menuListener    = NULL_KEY;
+key     g_inputListener   = NULL_KEY;
+key     g_submenuListener = NULL_KEY;
+key     g_confirmListener = NULL_KEY;
+ 
+// What action is pending confirmation?
+// "reset_defaults" | "factory_reset" | "new_owner"
+string  g_pendingConfirm  = "";
+ 
+// ── Persisted state ─────────────────────────────────────────
+string  g_webURL            = "";    // web panel base URL       (root prim)
+integer g_heartbeatInterval = 60;    // seconds (stored as minutes, converted on load)
+integer g_hudLocked         = FALSE; // TRUE = RLV detach locked  (child prim 2, lk=)
+integer g_pwSet             = 0;     // 0 = temp password only, 1 = user has set password
+integer g_debugMode         = 0;     // 0 = quiet, 1 = verbose debug output (child prim 2, dbg=)
+ 
+// ── Access UUID ──────────────────────────────────────────────
+// Not stored in state — always derived as (string)llGetOwner().
+// Kept as a helper string set once in initialise() for convenience.
+string  g_accessUUID        = "";
+ 
+// ── Relay version ────────────────────────────────────────────
+// Set when LM_RELAY_URL arrives — the relay appends its version
+// to the sim URL payload as "url|version". Empty until first
+// LM_RELAY_URL is received (e.g. during the brief startup window).
+string  g_relayVersion      = "";
+ 
+// ── Access code ───────────────────────────────────────────────
+// Optional code set by the wearer to match the website's ACCESS_CODE
+// constant. Empty string = no code required (default). Persisted as
+// ac= in child prim 2. Sent with every checkin and heartbeat POST.
+string  g_accessCode        = "";
+ 
+// ── Debug helper ─────────────────────────────────────────────
+dbg(string msg)
+{
+    if (g_debugMode) llOwnerSay(msg);
+}
+ 
+// ── Runtime state ───────────────────────────────────────────
+string  g_simURL            = "";    // current sim URL from relay (not persisted)
+integer g_awaitingInput     = FALSE; // TRUE while waiting for folder path input
+integer g_awaitingURL       = FALSE; // TRUE while waiting for web URL input
+integer g_awaitingAccessCode = FALSE; // TRUE while waiting for access code input
+integer g_urlJustChanged    = FALSE; // TRUE when URL was just changed — triggers password reminder on next successful checkin
+ 
+// ── In-flight HTTP request tracking ─────────────────────────
+key     g_httpCheckin       = NULL_KEY;
+key     g_httpHeartbeat     = NULL_KEY;
+key     g_httpOutfit        = NULL_KEY;
+key     g_httpPassword      = NULL_KEY;
+ 
+// ── RLV check state ──────────────────────────────────────────
+integer g_rlvCheckTimer    = FALSE;
+integer g_rlvCheckChannel  = 0;
+key     g_rlvCheckListener = NULL_KEY;
+ 
+// ── Prim link numbers ────────────────────────────────────────
+integer PRIM_ROOT           = 1;    // root prim       — web URL
+integer PRIM_UUIDS          = 2;    // child prim 1    — reserved (unused from v0.22)
+integer PRIM_SETTINGS       = 3;    // child prim 2    — general settings (key=value)
+ 
+// ── Constants ───────────────────────────────────────────────
+string  SEP               = "|";
+string  DEFAULT_WEB_URL   = "https://ensemble.virtualportal.space";
+integer DEFAULT_HEARTBEAT = 60;     // seconds (1 minute)
+ 
+// ============================================================
+// PERSISTENCE
+// ============================================================
+ 
+savePersistence()
+{
+    // Root prim: web URL only — full 127 chars available
+    llSetLinkPrimitiveParamsFast(PRIM_ROOT, [PRIM_DESC, g_webURL]);
+ 
+    // Child prim 1: unused from v0.22 — access UUID is now llGetOwner(),
+    // which is always derivable, so there is nothing to store here.
+    // We do NOT write to PRIM_UUIDS to avoid confusion with old-format data.
+ 
+    // Child prim 2: key=value settings
+    integer hbMinutes = g_heartbeatInterval / 60;
+    if (hbMinutes < 1) hbMinutes = 1;
+    llSetLinkPrimitiveParamsFast(PRIM_SETTINGS, [PRIM_DESC,
+        "hb=" + (string)hbMinutes
+        + SEP + "lk=" + (string)g_hudLocked
+        + SEP + "pws=" + (string)g_pwSet
+        + SEP + "dbg=" + (string)g_debugMode
+        + SEP + "ac=" + g_accessCode]);
+}
+ 
+// Extract value for a key from a pipe-separated key=value string.
+string getSettingsValue(string settings, string keyName)
+{
+    list pairs = llParseString2List(settings, [SEP], []);
+    integer i;
+    for (i = 0; i < llGetListLength(pairs); i++)
+    {
+        string pair = llList2String(pairs, i);
+        integer eq  = llSubStringIndex(pair, "=");
+        if (eq != -1 && llGetSubString(pair, 0, eq - 1) == keyName)
+        {
+            // Guard against LSL's llGetSubString wrapping behaviour when the
+            // value is empty (i.e. "key=" with nothing after the "=").
+            // eq + 1 would be past the end of the string, causing llGetSubString
+            // to wrap and return the whole pair string instead of "".
+            if (eq + 1 > llStringLength(pair) - 1) return "";
+            return llGetSubString(pair, eq + 1, -1);
+        }
+    }
+    return "";
+}
+ 
+loadPersistence()
+{
+    // Root prim: web URL
+    string url = llList2String(
+                     llGetLinkPrimitiveParams(PRIM_ROOT, [PRIM_DESC]), 0);
+    if (url != "" && url != "(No Description)")
+        g_webURL = url;
+ 
+    // Child prim 1: not used from v0.22. Any old accessUUID|ownerUUID data
+    // still present is intentionally ignored — the access UUID is now always
+    // llGetOwner(), which never needs to be loaded from prim storage.
+ 
+    // Child prim 2: settings
+    // Migration: v0.7 stored "seconds|locked" positionally (e.g. "60|1").
+    // v0.8 uses key=value (e.g. "hb=1|lk=1|pws=0").
+    string settings = llList2String(
+                          llGetLinkPrimitiveParams(PRIM_SETTINGS, [PRIM_DESC]), 0);
+    if (settings != "" && settings != "(No Description)")
+    {
+        if (llSubStringIndex(settings, "=") == -1)
+        {
+            // ── Old positional format — migrate ──────────────
+            list parts = llParseString2List(settings, [SEP], []);
+            integer oldSeconds = (integer)llList2String(parts, 0);
+            if (oldSeconds >= 60) g_heartbeatInterval = oldSeconds;
+            if (llGetListLength(parts) >= 2)
+                g_hudLocked = (integer)llList2String(parts, 1);
+            g_pwSet = 0;
+            savePersistence();
+            dbg("[Ensemble] Settings format migrated to v0.8 key=value.");
+        }
+        else
+        {
+            // ── New key=value format ──────────────────────────
+            string hbVal  = getSettingsValue(settings, "hb");
+            string lkVal  = getSettingsValue(settings, "lk");
+            string pwsVal = getSettingsValue(settings, "pws");
+ 
+            if (hbVal != "")
+            {
+                integer hbMinutes = (integer)hbVal;
+                if (hbMinutes >= 1) g_heartbeatInterval = hbMinutes * 60;
+            }
+            if (lkVal  != "") g_hudLocked = (integer)lkVal;
+            if (pwsVal != "") g_pwSet     = (integer)pwsVal;
+            string dbgVal = getSettingsValue(settings, "dbg");
+            if (dbgVal != "") g_debugMode = (integer)dbgVal;
+            string acVal = getSettingsValue(settings, "ac");
+            // ac= key may be present with an empty value — that is valid (no code set).
+            // We only update if the key exists in the string at all.
+            if (llSubStringIndex(settings, SEP + "ac=") != -1
+             || llSubStringIndex(settings, "ac=") == 0)
+                g_accessCode = acVal;
+        }
+    }
+}
+ 
+// ============================================================
+// HUD LOCK / UNLOCK
+// ============================================================
+ 
+applyLockState()
+{
+    if (g_hudLocked)
+        llOwnerSay("@detach=n");
+}
+ 
+// ============================================================
+// OUTFIT FOLDER LOCKING
+// ============================================================
+ 
+applyOutfitLocks(string lockedFoldersJSON)
+{
+    list entries = llJson2List(lockedFoldersJSON);
+    integer count = llGetListLength(entries);
+    if (count == 0) return;
+ 
+    integer i;
+    for (i = 0; i < count; i++)
+    {
+        string entry      = llList2String(entries, i);
+        string folderPath = llJsonGetValue(entry, ["folder"]);
+        string wearMode   = llJsonGetValue(entry, ["wear_mode"]);
+ 
+        if (folderPath == "" || folderPath == JSON_INVALID) jump continue_lock;
+ 
+        if (llSubStringIndex(wearMode, "subfolders") == 0)
+            llOwnerSay("@detachallthis:" + folderPath + "=n");
+        else
+            llOwnerSay("@detachthis:" + folderPath + "=n");
+        @continue_lock;
+    }
+ 
+    dbg("[Ensemble] Re-applied locks for " + (string)count + " outfit folder(s).");
+}
+ 
+parseAndApplyLockedFolders(string body)
+{
+    string marker = "\"locked_folders\":";
+    integer pos   = llSubStringIndex(body, marker);
+    if (pos == -1) return;
+ 
+    string fromBracket = llGetSubString(body, pos + llStringLength(marker), -1);
+    integer start = llSubStringIndex(fromBracket, "[");
+    integer end   = llSubStringIndex(fromBracket, "]");
+    if (start == -1 || end == -1) return;
+ 
+    string jsonArray = llGetSubString(fromBracket, start, end);
+    applyOutfitLocks(jsonArray);
+}
+ 
+toggleHudLock()
+{
+    g_hudLocked = !g_hudLocked;
+    savePersistence();
+ 
+    if (g_hudLocked)
+    {
+        llOwnerSay("@detach=n");
+        llOwnerSay("[Ensemble] HUD locked -- it will not be removed when wearing outfits.");
+    }
+    else
+    {
+        llOwnerSay("@detach=y");
+        llOwnerSay("[Ensemble] HUD unlocked -- it can now be removed normally.");
+    }
+ 
+    sendHeartbeat();
+}
+ 
+// ============================================================
+// PASSWORD BOOTSTRAP
+// ============================================================
+ 
+string generateTempPassword()
+{
+    string chars = "abcdefghjkmnpqrstuvwxyz"
+                 + "ABCDEFGHJKLMNPQRSTUVWXYZ"
+                 + "23456789"
+                 + "!@#$%";
+    integer len  = llStringLength(chars);
+    string  pw   = "";
+    integer i;
+    for (i = 0; i < 12; i++)
+    {
+        integer idx = (integer)llFrand(len);
+        pw += llGetSubString(chars, idx, idx);
+    }
+    return pw;
+}
+ 
+sendTempPassword(string tempPw)
+{
+    if (g_webURL == "")
+    {
+        llOwnerSay("[Ensemble] Web URL not set -- cannot send temporary password.");
+        llOwnerSay("  Set your web URL in Settings, then use Reset Password to retry.");
+        return;
+    }
+ 
+    string pwHash = llMD5String(tempPw, 0);
+ 
+    string body = "access_uuid=" + g_accessUUID
+                + "&pw_hash="    + pwHash;
+ 
+    g_httpPassword = llHTTPRequest(
+        g_webURL + "/api.php?action=set_temp_password",
+        [HTTP_METHOD, "POST",
+         HTTP_MIMETYPE, "application/x-www-form-urlencoded",
+         HTTP_VERIFY_CERT, TRUE],
+        body
+    );
+}
+ 
+doPasswordReset()
+{
+    string tempPw = generateTempPassword();
+ 
+    g_pwSet = 0;
+    savePersistence();
+ 
+    llInstantMessage(llGetOwner(),
+        "[Ensemble] Your temporary password is: " + tempPw + "\n"
+        + "Go to " + g_webURL + " and log in with your Avatar UUID and this password.\n"
+        + "You will be asked to set a new password immediately.\n"
+        + "⚠ This password is only valid for this session. If you relog or reattach the HUD before logging in, a new one will be generated.");
+ 
+    sendTempPassword(tempPw);
+}
+ 
+// ============================================================
+// CHANNEL HELPERS
+// ============================================================
+ 
+integer channelFromKey(key k)
+{
+    return (integer)("0x" + llGetSubString((string)k, 0, 6)) * -1;
+}
+ 
+cleanupMenuListen()
+{
+    if (g_menuListener != NULL_KEY)
+    {
+        llListenRemove((integer)g_menuListener);
+        g_menuListener = NULL_KEY;
+    }
+}
+ 
+cleanupInputListen()
+{
+    if (g_inputListener != NULL_KEY)
+    {
+        llListenRemove((integer)g_inputListener);
+        g_inputListener = NULL_KEY;
+    }
+}
+ 
+cleanupSubmenuListen()
+{
+    if (g_submenuListener != NULL_KEY)
+    {
+        llListenRemove((integer)g_submenuListener);
+        g_submenuListener = NULL_KEY;
+    }
+}
+ 
+cleanupConfirmListen()
+{
+    if (g_confirmListener != NULL_KEY)
+    {
+        llListenRemove((integer)g_confirmListener);
+        g_confirmListener = NULL_KEY;
+        g_pendingConfirm  = "";
+    }
+}
+ 
+// ============================================================
+// MENUS
+// ============================================================
+ 
+showMainMenu(key toucher)
+{
+    cleanupMenuListen();
+    cleanupSubmenuListen();
+    MENU_CHANNEL   = channelFromKey(llGetOwner());
+    g_menuListener = (key)llListen(MENU_CHANNEL, "", llGetOwner(), "");
+ 
+    string lockLabel = g_hudLocked ? "Unlock HUD" : "Lock HUD";
+ 
+    // Show first 8 chars of avatar UUID as a quick identity hint
+    string header = "── Ensemble ──\n"
+                  + "Avatar UUID: " + llGetSubString(g_accessUUID, 0, 7) + "...\n"
+                  + "Web: " + (g_webURL != "" ? g_webURL : "(not set)") + "\n"
+                  + "HUD: " + (g_hudLocked ? "[LOCKED]" : "[UNLOCKED]");
+ 
+    llDialog(toucher, header, ["Create Outfit", "Website", lockLabel, "Settings"], MENU_CHANNEL);
+    llSetTimerEvent(60.0);
+}
+ 
+showSettingsMenu(key toucher)
+{
+    cleanupMenuListen();
+    cleanupSubmenuListen();
+    MENU_CHANNEL   = channelFromKey(llGetOwner()) - 1;
+    g_menuListener = (key)llListen(MENU_CHANNEL, "", llGetOwner(), "");
+ 
+    string hbLabel  = "Heartbeat: " + (string)(g_heartbeatInterval / 60) + "min";
+    string pwLabel  = g_pwSet ? "New Passwd" : "Set Passwd";
+    string dbgLabel = g_debugMode ? "Debug: ON" : "Debug: OFF";
+    string acLabel  = g_accessCode != "" ? "Access Code: set" : "Access Code";
+    string header   = "── Settings ──\n"
+                    + "Web URL: " + (g_webURL != "" ? g_webURL : "(not set)") + "\n"
+                    + "Avatar UUID: " + g_accessUUID + "\n"
+                    + "Heartbeat: every " + (string)(g_heartbeatInterval / 60) + " min\n"
+                    + "Password: " + (g_pwSet ? "set" : "not set (temp password active)") + "\n"
+                    + "Access Code: " + (g_accessCode != "" ? "set (hidden)" : "none") + "\n"
+                    + "Debug: " + (g_debugMode ? "ON" : "off");
+ 
+    llDialog(toucher, header,
+        ["Set Web URL", hbLabel, pwLabel, dbgLabel, acLabel, "Reset Defaults", "Factory Reset", "<- Back"],
+        MENU_CHANNEL);
+    llSetTimerEvent(60.0);
+}
+ 
+showHeartbeatMenu(key toucher)
+{
+    cleanupSubmenuListen();
+    SUBMENU_CHANNEL   = channelFromKey(llGetOwner()) - 2;
+    g_submenuListener = (key)llListen(SUBMENU_CHANNEL, "", llGetOwner(), "");
+ 
+    string header = "── Heartbeat Frequency ──\n"
+                  + "Current: every " + (string)(g_heartbeatInterval / 60) + " min\n\n"
+                  + "How often should the HUD check in with the web panel?\n"
+                  + "More frequent = owner commands reach you faster.\n"
+                  + "Less frequent = quieter network traffic.";
+ 
+    llDialog(toucher, header, ["1 min", "3 min", "5 min", "<- Back"], SUBMENU_CHANNEL);
+    llSetTimerEvent(60.0);
+}
+ 
+// ============================================================
+// CONFIRMATION DIALOGS
+// ============================================================
+ 
+showConfirmDialog(string action)
+{
+    cleanupConfirmListen();
+    cleanupMenuListen();
+    cleanupSubmenuListen();
+ 
+    CONFIRM_CHANNEL   = channelFromKey(llGetOwner()) - 5;
+    g_confirmListener = (key)llListen(CONFIRM_CHANNEL, "", llGetOwner(), "");
+    g_pendingConfirm  = action;
+ 
+    string header;
+    if (action == "reset_defaults")
+        header = "── Reset Defaults ──\n\n"
+               + "This will reset your web URL and heartbeat interval to defaults.\n\n"
+               + "Your Avatar UUID and password state will NOT be changed.\n"
+               + "However, your HUD will stop talking to the website until you\n"
+               + "re-enter the web URL in Settings.\n\n"
+               + "Are you sure?";
+    else if (action == "factory_reset")
+        header = "── Factory Reset ──\n\n"
+               + "This will WIPE all stored data:\n"
+               + "  - Password state\n"
+               + "  - Web URL\n"
+               + "  - All settings\n\n"
+               + "Your web panel account will become inaccessible\n"
+               + "until you log in again.\n"
+               + "The HUD will reinitialise as if brand new.\n\n"
+               + "Are you sure?";
+    else if (action == "new_owner")
+        header = "── New User Detected ──\n\n"
+               + "This HUD contains data from a different user.\n\n"
+               + "Perform a factory reset? This will wipe all stored data\n"
+               + "and register you as the new owner.\n\n"
+               + "Choosing No will leave the existing data in place,\n"
+               + "which may cause unexpected behaviour.";
+    else
+        header = "Are you sure?";
+ 
+    llDialog(llGetOwner(), header, ["Yes", "No"], CONFIRM_CHANNEL);
+    llSetTimerEvent(60.0);
+}
+ 
+// ============================================================
+// FACTORY RESET
+// ============================================================
+ 
+doFactoryReset()
+{
+    llOwnerSay("[Ensemble] Factory reset in progress -- wiping all stored data.");
+ 
+    llSetLinkPrimitiveParamsFast(PRIM_ROOT,     [PRIM_DESC, ""]);
+    llSetLinkPrimitiveParamsFast(PRIM_UUIDS,    [PRIM_DESC, ""]);
+    llSetLinkPrimitiveParamsFast(PRIM_SETTINGS, [PRIM_DESC, ""]);
+ 
+    g_webURL            = DEFAULT_WEB_URL;
+    g_heartbeatInterval = DEFAULT_HEARTBEAT;
+    g_hudLocked         = FALSE;
+    g_pwSet             = 0;
+    g_debugMode         = 0;
+    g_accessCode        = "";
+    g_simURL            = "";
+ 
+    llOwnerSay("@detach=y");
+    llOwnerSay("[Ensemble] Factory reset complete. Reinitialising...");
+ 
+    initialise();
+    // doPasswordReset() is called from the checkin response handler once
+    // the account is confirmed to exist on the web panel.
+}
+ 
+// ============================================================
+// INPUT PROMPTS
+// ============================================================
+ 
+promptFolderName()
+{
+    cleanupInputListen();
+    INPUT_CHANNEL   = channelFromKey(llGetOwner()) - 3;
+    g_inputListener = (key)llListen(INPUT_CHANNEL, "", llGetOwner(), "");
+    g_awaitingInput = TRUE;
+    g_awaitingURL   = FALSE;
+ 
+    llTextBox(llGetOwner(),
+        "Enter the RLV path to your outfit folder.\n\n"
+        + "This is the path relative to your #RLV folder.\n"
+        + "Examples:\n"
+        + "  .ensemble/outfits/PinkDress\n"
+        + "  .ensemble/PinkDress\n"
+        + "  MyOutfits/PinkDress\n\n"
+        + "Use underscores instead of spaces.\n"
+        + "Do NOT include #RLV/ at the start -- it will be removed automatically if you do.\n\n"
+        + "IMPORTANT: All items must be directly in this folder.\n"
+        + "Subfolders will NOT be worn. Move all items to the top level.\n\n",
+        INPUT_CHANNEL);
+ 
+    llSetTimerEvent(120.0);
+}
+ 
+promptWebURL()
+{
+    cleanupInputListen();
+    INPUT_CHANNEL   = channelFromKey(llGetOwner()) - 4;
+    g_inputListener = (key)llListen(INPUT_CHANNEL, "", llGetOwner(), "");
+    g_awaitingInput = FALSE;
+    g_awaitingURL   = TRUE;
+    g_awaitingAccessCode = FALSE;
+ 
+    llTextBox(llGetOwner(),
+        "Enter the full URL of your Ensemble web panel.\n\n"
+        + "Example:\n  https://ensemble.virtualportal.space\n\n"
+        + "Current: " + (g_webURL != "" ? g_webURL : "(not set)"),
+        INPUT_CHANNEL);
+ 
+    llSetTimerEvent(120.0);
+}
+ 
+promptAccessCode()
+{
+    cleanupInputListen();
+    INPUT_CHANNEL   = channelFromKey(llGetOwner()) - 4;
+    g_inputListener = (key)llListen(INPUT_CHANNEL, "", llGetOwner(), "");
+    g_awaitingInput      = FALSE;
+    g_awaitingURL        = FALSE;
+    g_awaitingAccessCode = TRUE;
+ 
+    llTextBox(llGetOwner(),
+        "Enter the access code for this Ensemble web panel.\n\n"
+        + "The access code must match the ACCESS_CODE setting on the\n"
+        + "website. If the website has no code set, leave this blank.\n\n"
+        + "To CLEAR an existing code, submit an empty field.\n\n"
+        + "Current: " + (g_accessCode != "" ? "(code is set — value hidden)" : "(none)"),
+        INPUT_CHANNEL);
+ 
+    llSetTimerEvent(120.0);
+}
+ 
+// ============================================================
+// FOLDER PATH HELPERS
+// ============================================================
+ 
+string sanitiseFolderPath(string path)
+{
+    if (llGetSubString(path, 0, 5) == "#RLV/")
+        path = llGetSubString(path, 6, -1);
+    else if (llGetSubString(path, 0, 4) == "#RLV")
+        path = llGetSubString(path, 5, -1);
+ 
+    if (llGetSubString(path, 0, 0) == "/")
+        path = llGetSubString(path, 1, -1);
+ 
+    return path;
+}
+ 
+string validateFolderPath(string path)
+{
+    if (path == "")                  return "Folder path cannot be empty.";
+    if (llStringLength(path) > 100)  return "Folder path is too long (max 100 characters).";
+ 
+    if (llSubStringIndex(path, " ") != -1)
+        return "WARNING_SPACES";
+ 
+    if (   llSubStringIndex(path, "=") != -1
+        || llSubStringIndex(path, ",") != -1
+        || llSubStringIndex(path, "&") != -1)
+        return "WARNING_CHARS";
+ 
+    return "";
+}
+ 
+string collectAttachments()
+{
+    list    attached = llGetAttachedList(llGetOwner());
+    string  jsonArr  = "[";
+    integer total    = llGetListLength(attached);
+    integer i;
+    for (i = 0; i < total; i++)
+    {
+        key     objKey   = llList2Key(attached, i);
+        list    details  = llGetObjectDetails(objKey, [OBJECT_NAME, OBJECT_ATTACHED_POINT]);
+        string  itemName = llList2String(details, 0);
+        integer apInt    = llList2Integer(details, 1);
+ 
+        itemName = llDumpList2String(llParseString2List(itemName, ["\""], []), "\\\"");
+ 
+        if (i > 0) jsonArr += ",";
+        jsonArr += "{\"point\":\"" + attachPointName(apInt)
+                + "\",\"item\":\"" + itemName + "\"}";
+    }
+    return jsonArr + "]";
+}
+ 
+string attachPointName(integer ap)
+{
+    if (ap == ATTACH_CHEST)      return "Chest";
+    if (ap == ATTACH_HEAD)       return "Skull";
+    if (ap == ATTACH_LSHOULDER)  return "Left Shoulder";
+    if (ap == ATTACH_RSHOULDER)  return "Right Shoulder";
+    if (ap == ATTACH_LHAND)      return "Left Hand";
+    if (ap == ATTACH_RHAND)      return "Right Hand";
+    if (ap == ATTACH_LFOOT)      return "Left Foot";
+    if (ap == ATTACH_RFOOT)      return "Right Foot";
+    if (ap == ATTACH_BACK)       return "Spine";
+    if (ap == ATTACH_PELVIS)     return "Pelvis";
+    if (ap == ATTACH_MOUTH)      return "Mouth";
+    if (ap == ATTACH_CHIN)       return "Chin";
+    if (ap == ATTACH_LEAR)       return "Left Ear";
+    if (ap == ATTACH_REAR)       return "Right Ear";
+    if (ap == ATTACH_LEYE)       return "Left Eye";
+    if (ap == ATTACH_REYE)       return "Right Eye";
+    if (ap == ATTACH_NOSE)       return "Nose";
+    if (ap == ATTACH_RUARM)      return "R Upper Arm";
+    if (ap == ATTACH_RLARM)      return "R Forearm";
+    if (ap == ATTACH_LUARM)      return "L Upper Arm";
+    if (ap == ATTACH_LLARM)      return "L Forearm";
+    if (ap == ATTACH_RHIP)       return "Right Hip";
+    if (ap == ATTACH_RULEG)      return "R Upper Leg";
+    if (ap == ATTACH_RLLEG)      return "R Lower Leg";
+    if (ap == ATTACH_LHIP)       return "Left Hip";
+    if (ap == ATTACH_LULEG)      return "L Upper Leg";
+    if (ap == ATTACH_LLLEG)      return "L Lower Leg";
+    if (ap == ATTACH_BELLY)      return "Stomach";
+    if (ap == ATTACH_LEFT_PEC)   return "Left Pec";
+    if (ap == ATTACH_RIGHT_PEC)  return "Right Pec";
+    if (ap == ATTACH_HUD_CENTER_2)     return "HUD Center 2";
+    if (ap == ATTACH_HUD_TOP_RIGHT)    return "HUD Top Right";
+    if (ap == ATTACH_HUD_TOP_CENTER)   return "HUD Top";
+    if (ap == ATTACH_HUD_TOP_LEFT)     return "HUD Top Left";
+    if (ap == ATTACH_HUD_CENTER_1)     return "HUD Center";
+    if (ap == ATTACH_HUD_BOTTOM_LEFT)  return "HUD Bottom Left";
+    if (ap == ATTACH_HUD_BOTTOM)       return "HUD Bottom";
+    if (ap == ATTACH_HUD_BOTTOM_RIGHT) return "HUD Bottom Right";
+    if (ap == 39) return "Neck";
+    if (ap == 40) return "Avatar Center";
+    if (ap == 41) return "Left Ring Finger";
+    if (ap == 42) return "Right Ring Finger";
+    if (ap == 43) return "Tail Base";
+    if (ap == 44) return "Tail Tip";
+    if (ap == 45) return "Left Wing";
+    if (ap == 46) return "Right Wing";
+    if (ap == 47) return "Jaw";
+    if (ap == 48) return "Alt Left Ear";
+    if (ap == 49) return "Alt Right Ear";
+    if (ap == 50) return "Alt Left Eye";
+    if (ap == 51) return "Alt Right Eye";
+    if (ap == 52) return "Tongue";
+    if (ap == 53) return "Groin";
+    if (ap == 54) return "Left Hind Foot";
+    if (ap == 55) return "Right Hind Foot";
+    return "point_" + (string)ap;
+}
+ 
+// ============================================================
+// WEB COMMUNICATION
+// ============================================================
+ 
+sendCheckin()
+{
+    if (g_webURL == "")
+    {
+        llOwnerSay("[Ensemble] Web URL not set -- skipping checkin.");
+        llOwnerSay("  Go to Settings -> Set Web URL to configure.");
+        return;
+    }
+ 
+    string username = llGetDisplayName(llGetOwner());
+    if (username == "") username = llGetUsername(llGetOwner());
+ 
+    string body = "access_uuid="   + g_accessUUID
+                + "&username="     + llEscapeURL(username)
+                + "&sim_url="      + llEscapeURL(g_simURL)
+                + "&owner_uuid="   + (string)llGetOwner()
+                + "&region_name="  + llEscapeURL(llGetRegionName())
+                + "&hud_locked="   + (string)g_hudLocked
+                + "&core_version=" + llEscapeURL(CORE_VERSION)
+                + "&relay_version="+ llEscapeURL(g_relayVersion)
+                + "&access_code="  + llEscapeURL(g_accessCode);
+ 
+    g_httpCheckin = llHTTPRequest(
+        g_webURL + "/api.php?action=checkin",
+        [HTTP_METHOD, "POST",
+         HTTP_MIMETYPE, "application/x-www-form-urlencoded",
+         HTTP_VERIFY_CERT, TRUE],
+        body
+    );
+}
+ 
+sendHeartbeat()
+{
+    if (g_webURL == "") return;
+ 
+    string username = llGetDisplayName(llGetOwner());
+    if (username == "") username = llGetUsername(llGetOwner());
+ 
+    string body = "access_uuid="   + g_accessUUID
+                + "&username="     + llEscapeURL(username)
+                + "&sim_url="      + llEscapeURL(g_simURL)
+                + "&owner_uuid="   + (string)llGetOwner()
+                + "&region_name="  + llEscapeURL(llGetRegionName())
+                + "&hud_locked="   + (string)g_hudLocked
+                + "&core_version=" + llEscapeURL(CORE_VERSION)
+                + "&relay_version="+ llEscapeURL(g_relayVersion)
+                + "&access_code="  + llEscapeURL(g_accessCode);
+ 
+    g_httpHeartbeat = llHTTPRequest(
+        g_webURL + "/api.php?action=checkin",
+        [HTTP_METHOD, "POST",
+         HTTP_MIMETYPE, "application/x-www-form-urlencoded",
+         HTTP_VERIFY_CERT, TRUE],
+        body
+    );
+}
+ 
+sendOutfitCreate(string folderPath, string attachmentsJSON, integer hasSpaceWarning)
+{
+    if (g_webURL == "")
+    {
+        llOwnerSay("[Ensemble] Web URL not set -- cannot save outfit.");
+        return;
+    }
+ 
+    list   pathParts   = llParseString2List(folderPath, ["/"], []);
+    string lastPart    = llList2String(pathParts, llGetListLength(pathParts) - 1);
+    string displayName = llDumpList2String(llParseString2List(lastPart, ["_"], []), " ");
+ 
+    string body = "access_uuid="        + g_accessUUID
+                + "&folder_path="       + llEscapeURL(folderPath)
+                + "&outfit_name="       + llEscapeURL(displayName)
+                + "&attachments="       + llEscapeURL(attachmentsJSON)
+                + "&has_space_warning=" + (string)hasSpaceWarning;
+ 
+    g_httpOutfit = llHTTPRequest(
+        g_webURL + "/api.php?action=outfit_create",
+        [HTTP_METHOD, "POST",
+         HTTP_MIMETYPE, "application/x-www-form-urlencoded",
+         HTTP_VERIFY_CERT, TRUE],
+        body
+    );
+}
+ 
+// ============================================================
+// RESET FUNCTIONS
+// ============================================================
+ 
+resetDefaults()
+{
+    g_webURL            = DEFAULT_WEB_URL;
+    g_heartbeatInterval = DEFAULT_HEARTBEAT;
+    savePersistence();
+    startHeartbeat();
+    llOwnerSay("[Ensemble] Settings reset to defaults. Your Avatar UUID and password state are unchanged.");
+    llOwnerSay("  Avatar UUID: " + g_accessUUID);
+    llOwnerSay("  Web URL   : " + g_webURL);
+    llOwnerSay("  Heartbeat : every " + (string)(g_heartbeatInterval / 60) + " min");
+}
+ 
+toggleDebugMode()
+{
+    g_debugMode = !g_debugMode;
+    savePersistence();
+    syncDebugToRelay();
+    llOwnerSay("[Ensemble] Debug mode " + (g_debugMode ? "ON -- verbose messages enabled." : "OFF -- quiet mode active."));
+}
+ 
+syncDebugToRelay()
+{
+    llMessageLinked(LINK_SET, LM_DEBUG_SYNC, (string)g_debugMode, NULL_KEY);
+}
+ 
+// ============================================================
+// RLV CHECK
+// ============================================================
+ 
+startRLVCheck()
+{
+    if (g_rlvCheckListener != NULL_KEY)
+    {
+        llListenRemove((integer)g_rlvCheckListener);
+        g_rlvCheckListener = NULL_KEY;
+    }
+ 
+    // Channel must be positive — RLVa rejects @version with a negative channel.
+    g_rlvCheckChannel  = llAbs(channelFromKey(llGetOwner()) - 10);
+    if (g_rlvCheckChannel < 100) g_rlvCheckChannel += 1000000;
+    // NULL_KEY for speaker filter — llListen's third param is a NAME string,
+    // not a UUID. Passing llGetOwner() (a key) would be silently cast to a
+    // name string that never matches. Private channel is sufficient guard.
+    g_rlvCheckListener = (key)llListen(g_rlvCheckChannel, "", NULL_KEY, "");
+    g_rlvCheckTimer    = TRUE;
+ 
+    llOwnerSay("@version=" + (string)g_rlvCheckChannel);
+    llSetTimerEvent(3.0);
+}
+ 
+cleanupRLVCheck()
+{
+    if (g_rlvCheckListener != NULL_KEY)
+    {
+        llListenRemove((integer)g_rlvCheckListener);
+        g_rlvCheckListener = NULL_KEY;
+    }
+    g_rlvCheckTimer   = FALSE;
+    g_rlvCheckChannel = 0;
+}
+ 
+// ============================================================
+// HEARTBEAT TIMER
+// ============================================================
+ 
+startHeartbeat()
+{
+    llSetTimerEvent((float)g_heartbeatInterval);
+}
+ 
+// ============================================================
+// INITIALISATION
+// ============================================================
+ 
+initialise()
+{
+    loadPersistence();
+ 
+    // Access UUID is the avatar's permanent grid UUID — always derivable,
+    // never stored in prim. Set once here so all functions can use g_accessUUID.
+    g_accessUUID = (string)llGetOwner();
+ 
+    // Check for stale data from a different owner. This can occur on an
+    // old HUD that stored accessUUID|ownerUUID in child prim 1. We read
+    // the stored ownerUUID and compare; if it differs, the prim came from
+    // a different avatar and we should prompt for a factory reset.
+    // From v0.22, new prims never write to PRIM_UUIDS, so this only fires
+    // as a one-time migration path when upgrading from an older HUD.
+    string uuidPrimData = llList2String(
+                              llGetLinkPrimitiveParams(PRIM_UUIDS, [PRIM_DESC]), 0);
+    if (uuidPrimData != "" && uuidPrimData != "(No Description)")
+    {
+        list   parts           = llParseString2List(uuidPrimData, [SEP], []);
+        string storedOwnerUUID = llList2String(parts, 1); // field 1 = ownerUUID
+        if (storedOwnerUUID != "" && storedOwnerUUID != (string)llGetOwner())
+        {
+            llOwnerSay("[Ensemble] Different user detected in stored data.");
+            applyLockState();
+            showConfirmDialog("new_owner");
+            return;
+        }
+        // Data belongs to this owner — clear it so the prim is clean going forward.
+        llSetLinkPrimitiveParamsFast(PRIM_UUIDS, [PRIM_DESC, ""]);
+        dbg("[Ensemble] Cleared legacy accessUUID|ownerUUID from child prim 1.");
+    }
+ 
+    if (g_webURL == "") g_webURL = DEFAULT_WEB_URL;
+ 
+    llOwnerSay("[Ensemble] Ready. (Core v" + CORE_VERSION + ")");
+    llOwnerSay("  Avatar UUID: " + g_accessUUID);
+    llOwnerSay("  Web URL   : " + g_webURL);
+    llOwnerSay("  Heartbeat : every " + (string)(g_heartbeatInterval / 60) + " min");
+    llOwnerSay("  HUD lock  : " + (g_hudLocked ? "locked" : "unlocked"));
+    llOwnerSay("  Password  : " + (g_pwSet ? "set" : "not set"));
+    llOwnerSay("  Access Code: " + (g_accessCode != "" ? "set (hidden)" : "none"));
+    llOwnerSay("  Debug     : " + (g_debugMode ? "ON" : "off"));
+ 
+    applyLockState();
+ 
+    // Always request a fresh sim URL from the relay. On normal startup both
+    // scripts initialise together and the relay sends LM_RELAY_URL anyway,
+    // so this causes one redundant request — harmless, since the handler
+    // simply overwrites g_simURL. After an owner-change llResetScript(), the
+    // relay is already running and won't re-send spontaneously, so without
+    // this explicit request the checkin (and therefore doPasswordReset()) would
+    // never fire on a transferred HUD.
+    llMessageLinked(LINK_SET, LM_RELAY_REGISTER, "request_url", NULL_KEY);
+ 
+    // Push current debug mode to relay so its verbose messages respect the same flag.
+    syncDebugToRelay();
+}
+ 
+// ============================================================
+// STATE MACHINE
+// ============================================================
+ 
+default
+{
+    state_entry()
+    {
+        initialise();
+    }
+ 
+    on_rez(integer param)
+    {
+        initialise();
+    }
+ 
+    touch_start(integer total)
+    {
+        if (llDetectedKey(0) != llGetOwner()) return;
+        showMainMenu(llGetOwner());
+    }
+ 
+    listen(integer channel, string name, key id, string message)
+    {
+        // ── Main menu ────────────────────────────────────────
+        if (channel == MENU_CHANNEL)
+        {
+            cleanupMenuListen();
+ 
+            if (message == "Create Outfit")
+            {
+                promptFolderName();
+            }
+            else if (message == "Website")
+            {
+                if (g_webURL != "")
+                    llLoadURL(llGetOwner(), "Open Ensemble web panel?", g_webURL);
+                else
+                    llOwnerSay("[Ensemble] Web URL not set. Please configure it in Settings.");
+            }
+            else if (message == "Settings")
+            {
+                showSettingsMenu(llGetOwner());
+            }
+            else if (message == "Lock HUD" || message == "Unlock HUD")
+            {
+                toggleHudLock();
+            }
+            else if (message == "Set Web URL")
+            {
+                promptWebURL();
+            }
+            else if (llGetSubString(message, 0, 9) == "Heartbeat:")
+            {
+                showHeartbeatMenu(llGetOwner());
+            }
+            else if (message == "Reset Defaults")
+            {
+                showConfirmDialog("reset_defaults");
+            }
+            else if (message == "Factory Reset")
+            {
+                showConfirmDialog("factory_reset");
+            }
+            else if (message == "New Passwd" || message == "Set Passwd")
+            {
+                llOwnerSay("[Ensemble] Generating new temporary password...");
+                doPasswordReset();
+            }
+            else if (message == "Debug: ON" || message == "Debug: OFF")
+            {
+                toggleDebugMode();
+                showSettingsMenu(llGetOwner());
+            }
+            else if (message == "Access Code" || message == "Access Code: set")
+            {
+                promptAccessCode();
+            }
+            else if (message == "<- Back")
+            {
+                showMainMenu(llGetOwner());
+            }
+        }
+ 
+        // ── Confirmation dialog ──────────────────────────────
+        else if (channel == CONFIRM_CHANNEL)
+        {
+            string action = g_pendingConfirm;   // read BEFORE cleanup clears it
+            cleanupConfirmListen();
+ 
+            if (message == "Yes")
+            {
+                if (action == "reset_defaults")
+                {
+                    resetDefaults();
+                    showSettingsMenu(llGetOwner());
+                }
+                else if (action == "factory_reset" || action == "new_owner")
+                {
+                    doFactoryReset();
+                }
+            }
+            else // No
+            {
+                if (action == "new_owner")
+                {
+                    llOwnerSay("[Ensemble] Factory reset skipped. Existing data retained.");
+                    llOwnerSay("  If you experience problems, use Settings -> Factory Reset.");
+                    llMessageLinked(LINK_SET, LM_RELAY_REGISTER, "request_url", NULL_KEY);
+                    if (g_pwSet == 0) doPasswordReset();
+                }
+                else
+                {
+                    llOwnerSay("[Ensemble] " + action + " cancelled.");
+                    showSettingsMenu(llGetOwner());
+                }
+            }
+        }
+ 
+        // ── Heartbeat submenu ────────────────────────────────
+        else if (channel == SUBMENU_CHANNEL)
+        {
+            cleanupSubmenuListen();
+ 
+            if (message == "1 min")       g_heartbeatInterval = 60;
+            else if (message == "3 min")  g_heartbeatInterval = 180;
+            else if (message == "5 min")  g_heartbeatInterval = 300;
+            else if (message == "<- Back")
+            {
+                showSettingsMenu(llGetOwner());
+                return;
+            }
+ 
+            savePersistence();
+            startHeartbeat();
+            llOwnerSay("[Ensemble] Heartbeat set to every "
+                      + (string)(g_heartbeatInterval / 60) + " min.");
+            showSettingsMenu(llGetOwner());
+        }
+ 
+        // ── RLV @version response ────────────────────────────
+        else if (channel == g_rlvCheckChannel && g_rlvCheckTimer)
+        {
+            cleanupRLVCheck();
+            llMessageLinked(LINK_SET, LM_RLV_STATUS, "true|" + message, NULL_KEY);
+            llOwnerSay("[Ensemble] RLV check: enabled (" + message + ")");
+            startHeartbeat();
+        }
+ 
+        // ── Text input ───────────────────────────────────────
+        else if (channel == INPUT_CHANNEL)
+        {
+            cleanupInputListen();
+            llSetTimerEvent(0);
+            string trimmed = llStringTrim(message, STRING_TRIM);
+ 
+            if (g_awaitingInput)
+            {
+                g_awaitingInput = FALSE;
+                string folderPath = sanitiseFolderPath(trimmed);
+ 
+                if (folderPath == "")
+                {
+                    llOwnerSay("[Ensemble] Folder path is empty after removing #RLV/ prefix.");
+                    llOwnerSay("  Please enter the path relative to #RLV, e.g.: .ensemble/outfits/PinkDress");
+                    startHeartbeat();
+                    return;
+                }
+ 
+                if (folderPath != trimmed)
+                    llOwnerSay("[Ensemble] Note: #RLV/ prefix removed. Using: " + folderPath);
+ 
+                string validation = validateFolderPath(folderPath);
+ 
+                if (validation == "WARNING_SPACES")
+                {
+                    llOwnerSay("[Ensemble] WARNING: Path contains spaces: " + folderPath);
+                    llOwnerSay("  RLV matches on text before the first space -- wrong outfit may be worn.");
+                    string suggested = llDumpList2String(
+                                        llParseString2List(folderPath, [" "], []), "_");
+                    llOwnerSay("  Suggested: " + suggested);
+                    llOwnerSay("  Saving with warning. Please rename the folder in your viewer.");
+                    sendOutfitCreate(folderPath, collectAttachments(), TRUE);
+                }
+                else if (validation == "WARNING_CHARS")
+                {
+                    llOwnerSay("[Ensemble] WARNING: Path contains RLV-unsafe characters (= , &).");
+                    llOwnerSay("  Please rename the folder and re-save. Saving anyway.");
+                    sendOutfitCreate(folderPath, collectAttachments(), FALSE);
+                }
+                else if (validation != "")
+                {
+                    llOwnerSay("[Ensemble] Cannot save outfit: " + validation);
+                }
+                else
+                {
+                    sendOutfitCreate(folderPath, collectAttachments(), FALSE);
+                }
+                startHeartbeat();
+            }
+            else if (g_awaitingURL)
+            {
+                g_awaitingURL = FALSE;
+                if (trimmed != "")
+                {
+                    g_webURL = trimmed;
+                    savePersistence();
+                    llOwnerSay("[Ensemble] Web URL saved: " + g_webURL);
+                    g_urlJustChanged = TRUE;
+                    sendCheckin();
+                }
+                else
+                {
+                    llOwnerSay("[Ensemble] URL unchanged (empty input).");
+                }
+                startHeartbeat();
+            }
+            else if (g_awaitingAccessCode)
+            {
+                g_awaitingAccessCode = FALSE;
+                // Empty input clears the code; any other value sets it.
+                // The code is intentionally not echoed back in full — it is
+                // a shared secret and should not appear in the local chat log.
+                if (trimmed == "")
+                {
+                    g_accessCode = "";
+                    savePersistence();
+                    llOwnerSay("[Ensemble] Access code cleared.");
+                }
+                else
+                {
+                    g_accessCode = trimmed;
+                    savePersistence();
+                    llOwnerSay("[Ensemble] Access code saved (value hidden).");
+                }
+                sendCheckin();
+                startHeartbeat();
+            }
+        }
+    }
+ 
+    // ── HTTP responses from web panel ────────────────────────
+    http_response(key requestID, integer status, list metadata, string body)
+    {
+        if (requestID == g_httpCheckin)
+        {
+            g_httpCheckin = NULL_KEY;
+ 
+            if (status == 200)
+            {
+                if (llSubStringIndex(body, "\"new_user\":true") != -1)
+                    llOwnerSay("[Ensemble] Connected -- new account created on web panel.");
+                else
+                    dbg("[Ensemble] Connected -- existing account recognised.");
+ 
+                // Sync g_pwSet from server's authoritative pw_set value FIRST.
+                // This must happen before the doPasswordReset() check below so
+                // that a HUD on a new machine (where prim storage has pws=0)
+                // does not overwrite a real password the user already set.
+                // Bug fixed in v0.34: previously the reset fired before the sync,
+                // causing region crossings on a second computer to blow away the
+                // user's password.
+                if (llSubStringIndex(body, "\"pw_set\":1") != -1)
+                {
+                    if (g_pwSet == 0)
+                    {
+                        g_pwSet = 1;
+                        savePersistence();
+                        dbg("[Ensemble] pw_set synced from server: account already has a password.");
+                    }
+                }
+ 
+                // Send temp password now that the account is confirmed to exist
+                // and we have synced pw_set from the server.
+                // Doing this here avoids a 404 on fresh accounts — the account is
+                // created by this very checkin, so it exists by the time
+                // set_temp_password fires.
+                if (g_pwSet == 0)
+                    doPasswordReset();
+ 
+                if (g_urlJustChanged)
+                {
+                    g_urlJustChanged = FALSE;
+                    llOwnerSay("[Ensemble] Tip: If this is a new site, use Settings -> Set Password to generate a temporary password.");
+                }
+ 
+                parseAndApplyLockedFolders(body);
+            }
+            else if (status == 0)
+            {
+                llOwnerSay("[Ensemble] Checkin failed -- could not reach web panel.");
+                llOwnerSay("  Check your web URL in Settings.");
+            }
+            else if (status == 403)
+            {
+                llOwnerSay("[Ensemble] Checkin refused -- access code mismatch.");
+                llOwnerSay("  The website requires an access code. Set it in Settings -> Access Code.");
+            }
+            else
+            {
+                llOwnerSay("[Ensemble] Checkin failed -- server returned " + (string)status);
+            }
+        }
+        else if (requestID == g_httpHeartbeat)
+        {
+            g_httpHeartbeat = NULL_KEY;
+            if (status == 200)
+            {
+                parseAndApplyLockedFolders(body);
+                dbg("[Ensemble] Heartbeat OK.");
+            }
+            else if (status == 0)
+                llOwnerSay("[Ensemble] Heartbeat failed -- could not reach web panel.");
+            else if (status == 403)
+            {
+                llOwnerSay("[Ensemble] Heartbeat refused -- access code mismatch.");
+                llOwnerSay("  Check your access code in Settings.");
+            }
+        }
+        else if (requestID == g_httpOutfit)
+        {
+            g_httpOutfit = NULL_KEY;
+ 
+            if (status == 200)
+            {
+                string marker = "\"outfit_name\":\"";
+                integer pos   = llSubStringIndex(body, marker);
+                if (pos != -1)
+                {
+                    string remainder = llGetSubString(body, pos + llStringLength(marker), -1);
+                    integer endPos   = llSubStringIndex(remainder, "\"");
+                    if (endPos != -1)
+                        llOwnerSay("[Ensemble] Outfit saved: " + llGetSubString(remainder, 0, endPos - 1));
+                    else
+                        llOwnerSay("[Ensemble] Outfit saved.");
+                }
+                else
+                {
+                    llOwnerSay("[Ensemble] Outfit saved.");
+                }
+            }
+            else if (status == 0)
+                llOwnerSay("[Ensemble] Outfit save failed -- could not reach web panel.");
+            else if (status == 409)
+            {
+                llOwnerSay("[Ensemble] An outfit with that folder path already exists.");
+                llOwnerSay("  Delete the existing outfit on the web panel first, or use a different path.");
+            }
+            else
+                llOwnerSay("[Ensemble] Outfit save failed -- server returned " + (string)status);
+        }
+        else if (requestID == g_httpPassword)
+        {
+            g_httpPassword = NULL_KEY;
+ 
+            if (status == 200)
+            {
+                llOwnerSay("[Ensemble] Temporary password sent to web panel.");
+                llOwnerSay("  Check your IMs for your temporary password, then visit " + g_webURL);
+            }
+            else if (status == 0)
+            {
+                llOwnerSay("[Ensemble] Could not reach web panel to set temporary password.");
+                llOwnerSay("  Check your web URL in Settings, then use Reset Password to retry.");
+            }
+            else
+            {
+                llOwnerSay("[Ensemble] Password setup failed -- server returned " + (string)status);
+                llOwnerSay("  Use Reset Password to retry.");
+            }
+        }
+    }
+ 
+    // ── Link messages from relay script ──────────────────────
+    link_message(integer sender, integer num, string str, key id)
+    {
+        if (num == LM_RELAY_URL)
+        {
+            // Relay sends "sim_url|relay_version" — split on first "|".
+            // The pipe character is not valid in unencoded URLs so there
+            // is no ambiguity. g_relayVersion stays "" if no "|" is found
+            // (i.e. an older relay script that sends only the URL).
+            integer sep = llSubStringIndex(str, "|");
+            if (sep != -1)
+            {
+                g_simURL       = llGetSubString(str, 0, sep - 1);
+                g_relayVersion = llGetSubString(str, sep + 1, -1);
+            }
+            else
+            {
+                g_simURL       = str;   // old relay — no version appended
+                g_relayVersion = "";
+            }
+            dbg("[Ensemble] Sim URL registered: " + g_simURL
+              + " (relay v" + g_relayVersion + ")");
+ 
+            sendCheckin();
+            startHeartbeat();
+ 
+            // Temp password is sent from initialise() when g_pwSet == 0,
+            // so no need to repeat it here on every relay URL receipt.
+        }
+        else if (num == LM_OUTFIT_COMMAND)
+        {
+            list   parts      = llParseString2List(str, ["|"], []);
+            string cmdType    = llList2String(parts, 0);
+            string folderPath = llList2String(parts, 1);
+ 
+            if (cmdType == "wear" && folderPath != "")
+            {
+                string wearMode      = llList2String(parts, 2);
+                string removalPoints = llList2String(parts, 3);
+                if (wearMode == "") wearMode = "subfolders_replace";
+ 
+                if (removalPoints != "")
+                {
+                    list ptList = llParseString2List(removalPoints, [","], []);
+                    integer pi;
+                    integer ptCount = llGetListLength(ptList);
+                    dbg("[Ensemble] Clearing " + (string)ptCount + " attachment points before wearing.");
+                    for (pi = 0; pi < ptCount; pi++)
+                    {
+                        string ptStr = llStringTrim(llList2String(ptList, pi), STRING_TRIM);
+                        if (ptStr != "")
+                        {
+                            integer ptInt  = (integer)ptStr;
+                            string  ptName = attachPointName(ptInt);
+                            if (ptInt >= 31 && ptInt <= 38)
+                                ptName = llGetSubString(ptName, 4, -1); // strip "HUD "
+                            llOwnerSay("@remattach:" + ptName + "=force");
+                        }
+                    }
+                    llSleep(0.5);
+                }
+ 
+                string rlvCmd;
+                if      (wearMode == "folder_replace")     rlvCmd = "@attach:";
+                else if (wearMode == "folder_add")         rlvCmd = "@attachover:";
+                else if (wearMode == "subfolders_replace") rlvCmd = "@attachall:";
+                else                                       rlvCmd = "@attachallover:";
+ 
+                llOwnerSay("[Ensemble] Wearing: " + folderPath + " (" + wearMode + ")");
+                dbg("[Ensemble] RLV: " + rlvCmd + folderPath + "=force");
+                llOwnerSay(rlvCmd + folderPath + "=force");
+            }
+            else if (cmdType == "remove" && folderPath != "")
+            {
+                string wearMode   = llList2String(parts, 2);
+                string removeCmd;
+                if (wearMode == "subfolders_add" || wearMode == "subfolders_replace")
+                    removeCmd = "@detachall:";
+                else
+                    removeCmd = "@detach:";
+ 
+                llOwnerSay("[Ensemble] Removing: " + folderPath);
+                dbg("[Ensemble] RLV: " + removeCmd + folderPath + "=force");
+                llOwnerSay(removeCmd + folderPath + "=force");
+            }
+            else
+            {
+                llOwnerSay("[Ensemble] Unknown command from relay: " + str);
+            }
+        }
+        else if (num == LM_RLV_LOCK)
+        {
+            list   parts      = llParseString2List(str, ["|"], []);
+            string folderPath = llList2String(parts, 0);
+            string rlvValue   = llList2String(parts, 1);
+            string wearMode   = llList2String(parts, 2);
+ 
+            if (folderPath == "" || (rlvValue != "n" && rlvValue != "y"))
+            {
+                llOwnerSay("[Ensemble] Invalid rlv_lock message: " + str);
+            }
+            else
+            {
+                if (wearMode == "") wearMode = "subfolders_replace";
+                string rlvCmd;
+                if (llSubStringIndex(wearMode, "subfolders") == 0)
+                    rlvCmd = "@detachallthis:";
+                else
+                    rlvCmd = "@detachthis:";
+ 
+                llOwnerSay(rlvCmd + folderPath + "=" + rlvValue);
+ 
+                string action = (rlvValue == "n") ? "Locked" : "Unlocked";
+                llOwnerSay("[Ensemble] " + action + " outfit folder: " + folderPath + " (" + wearMode + ")");
+            }
+        }
+        else if (num == LM_DETACH_ITEM)
+        {
+            if (str != "")
+            {
+                llOwnerSay("@remattach:" + str + "=force");
+                llOwnerSay("[Ensemble] Detaching item at: " + str);
+            }
+        }
+        else if (num == LM_PASSWORD_SET)
+        {
+            g_pwSet = 1;
+            savePersistence();
+            llOwnerSay("[Ensemble] Password confirmed set. Your account is fully secured.");
+        }
+        else if (num == LM_RLV_CHECK)
+        {
+            startRLVCheck();
+        }
+        else if (num == LM_RLV_COMMAND)
+        {
+            if (str != "")
+            {
+                llOwnerSay(str);
+                dbg("[Ensemble] RLV command issued: " + str);
+            }
+        }
+    }
+ 
+    timer()
+    {
+        if (g_rlvCheckTimer)
+        {
+            cleanupRLVCheck();
+            llMessageLinked(LINK_SET, LM_RLV_STATUS, "false|", NULL_KEY);
+            llOwnerSay("[Ensemble] RLV check: no response -- RLV not enabled or not supported.");
+            startHeartbeat();
+            return;
+        }
+ 
+        cleanupMenuListen();
+        cleanupSubmenuListen();
+        cleanupInputListen();
+        g_awaitingInput = FALSE;
+        g_awaitingURL   = FALSE;
+        g_awaitingAccessCode = FALSE;
+ 
+        sendHeartbeat();
+        startHeartbeat();
+    }
+ 
+    changed(integer change)
+    {
+        if (change & CHANGED_OWNER)
+        {
+            llOwnerSay("[Ensemble] Owner changed -- wiping stored data for safe transfer.");
+            llSetLinkPrimitiveParamsFast(PRIM_ROOT,     [PRIM_DESC, ""]);
+            llSetLinkPrimitiveParamsFast(PRIM_UUIDS,    [PRIM_DESC, ""]);
+            llSetLinkPrimitiveParamsFast(PRIM_SETTINGS, [PRIM_DESC, ""]);
+            llOwnerSay("@detach=y");
+            llResetScript();
+        }
+    }
+}
